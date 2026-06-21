@@ -179,6 +179,62 @@ export default async function handler(req, res) {
         break;
       }
 
+      // ── 每股盈餘 + 每股淨值（用來算基準值）────────────────
+      // 使用 TWSE 官方每季財務摘要
+      case 'eps': {
+        // 用近期月營收頁面抓EPS和每股淨值
+        // t187ap06_L = 最近季EPS，t187ap04_L = 每股淨值
+        const [r1, r2] = await Promise.all([
+          fetch(`https://openapi.twse.com.tw/v1/opendata/t187ap06_L`, {
+            headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' }
+          }),
+          fetch(`https://openapi.twse.com.tw/v1/opendata/t187ap04_L`, {
+            headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' }
+          }),
+        ]);
+
+        const [raw1, raw2] = await Promise.all([r1.json(), r2.json()]);
+
+        // EPS 近4季
+        const epsRows = Array.isArray(raw1) ? raw1.filter(d => d['公司代號'] === stockNo) : [];
+        // 每股淨值
+        const bvRow   = Array.isArray(raw2) ? raw2.find(d  => d['公司代號'] === stockNo) : null;
+
+        if (!bvRow && epsRows.length === 0) {
+          res.status(200).json({ success: true, data: null, note: '查無財務資料' });
+          return;
+        }
+
+        // 近4季EPS加總
+        const recent4  = epsRows.slice(-4);
+        const eps4sum  = recent4.reduce((a, e) => a + (parseFloat(e['基本每股盈餘（元）']) || 0), 0);
+        const bookValue = bvRow ? parseFloat(bvRow['每股淨值']) || null : null;
+        const equity    = bvRow ? parseFloat((bvRow['股東權益合計'] || '').replace(/,/g, '')) || null : null;
+        const shares    = bvRow ? parseFloat((bvRow['普通股股數（千股）'] || '').replace(/,/g, '')) || null : null;
+
+        // 調整ROE = 近4季EPS / 每股淨值
+        const adjustedROE = (bookValue && eps4sum) ? (eps4sum / bookValue) * 100 : null;
+
+        // 基準值 = 每股淨值 × 調整ROE × 10
+        const benchmark = (bookValue && adjustedROE) ? bookValue * (adjustedROE / 100) * 10 : null;
+
+        data = {
+          eps4sum,
+          bookValue,
+          equity,
+          shares,
+          adjustedROE,
+          adjustedEquityPerShare: bookValue,
+          benchmark,
+          epsDetail: recent4.map(e => ({
+            year:    e['年度'],
+            quarter: e['季別'],
+            eps:     parseFloat(e['基本每股盈餘（元）']) || null,
+          })),
+        };
+        break;
+      }
+
       // ── 公司基本資料 ──────────────────────────────────────
       case 'company': {
         const url = `https://openapi.twse.com.tw/v1/opendata/t187ap03_L`;
