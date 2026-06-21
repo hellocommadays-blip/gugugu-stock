@@ -75,6 +75,134 @@ const MOCK_DATA = {
 const CS = { TWD:"NT$", USD:"$", JPY:"¥" };
 const ML = { TW:"台股", US:"美股", JP:"日股" };
 
+// 判斷市場：4碼數字=台股，純英文=美股，需用戶指定或帶市場前綴
+function detectMarket(sym) {
+  if (/^\d{4,6}$/.test(sym)) return "TW";   // 台股：2330, 00878
+  return "US";                                  // 預設美股；日股需輸入 7203.T 或選市場
+}
+
+// ============================================================
+// 真實 API 呼叫
+// ============================================================
+async function fetchStock(sym) {
+  const market = detectMarket(sym);
+
+  if (market === "TW") {
+    // 台股：同時抓報價 + 財務 + 歷史
+    const [priceRes, finRes, histRes] = await Promise.all([
+      fetch(`/api/twse?type=price&stockNo=${sym}`).then(r=>r.json()),
+      fetch(`/api/twse?type=financials&stockNo=${sym}`).then(r=>r.json()),
+      fetch(`/api/twse?type=history&stockNo=${sym}`).then(r=>r.json()),
+    ]);
+
+    if (!priceRes.success) throw new Error(priceRes.error || "查無此股票");
+
+    const price   = priceRes.data;
+    const fin     = finRes.success ? finRes.data : null;
+    const history = histRes.success ? histRes.data : [];
+
+    // 計算 EPS、每股淨值、調整ROE
+    let adjustedROE = null;
+    let adjustedEquityPerShare = null;
+    let pe = null;
+    let bookValue = null;
+
+    if (fin) {
+      bookValue = fin.bookValue;
+      adjustedEquityPerShare = fin.bookValue; // 用每股淨值近似
+      // 近4季EPS加總
+      const recent4 = fin.eps?.slice(-4) || [];
+      const eps4sum = recent4.reduce((a,e)=>a+(e.eps||0), 0);
+      if (bookValue && eps4sum) {
+        adjustedROE = (eps4sum / bookValue) * 100;
+      }
+      if (price.price && eps4sum) {
+        pe = price.price / eps4sum;
+      }
+    }
+
+    // 判斷 ETF（股票代號5碼以上或以0開頭）
+    const isETF = sym.length >= 5 || sym.startsWith("0");
+
+    // 計算支撐目標（用最近歷史最低/最高近似）
+    const recentPrices = history.slice(-20).map(h=>h.price).filter(Boolean);
+    const support = recentPrices.length ? Math.min(...recentPrices) : price.low;
+    const target  = recentPrices.length ? Math.max(...recentPrices) * 1.05 : price.high;
+
+    return {
+      symbol: sym,
+      name:   price.name,
+      market: "TW",
+      currency: "TWD",
+      isETF,
+      price:     price.price,
+      change:    price.change,
+      changePct: price.changePct,
+      open:      price.open,
+      high:      price.high,
+      low:       price.low,
+      prevClose: price.prevClose,
+      pe,
+      pb:              null, // TWSE OpenAPI 未提供
+      dividendYield:   null, // TWSE OpenAPI 未提供
+      roe:             adjustedROE,
+      adjustedROE:     adjustedROE,
+      adjustedEquityPerShare,
+      support,
+      target,
+      momentum: price.change,
+      history:  history.map(h=>({ date:h.date, price:h.price })),
+    };
+
+  } else {
+    // 美股/日股：Yahoo Finance
+    const isJP = sym.endsWith(".T");
+    const cleanSym = isJP ? sym.replace(".T","") : sym;
+    const mkt = isJP ? "JP" : "US";
+
+    const [quoteRes, finRes, histRes] = await Promise.all([
+      fetch(`/api/yahoo?symbol=${cleanSym}&market=${mkt}&type=quote`).then(r=>r.json()),
+      fetch(`/api/yahoo?symbol=${cleanSym}&market=${mkt}&type=financials`).then(r=>r.json()),
+      fetch(`/api/yahoo?symbol=${cleanSym}&market=${mkt}&type=history`).then(r=>r.json()),
+    ]);
+
+    if (!quoteRes.success) throw new Error(quoteRes.error || "查無此股票");
+
+    const q   = quoteRes.data;
+    const fin = finRes.success ? finRes.data : null;
+    const history = histRes.success ? histRes.data : [];
+
+    const recentPrices = history.slice(-20).map(h=>h.price).filter(Boolean);
+    const support = recentPrices.length ? Math.min(...recentPrices) : q.low;
+    const target  = recentPrices.length ? Math.max(...recentPrices) * 1.05 : q.high;
+
+    return {
+      symbol: cleanSym,
+      name:   q.name,
+      market: mkt,
+      currency: q.currency || (mkt==="JP"?"JPY":"USD"),
+      isETF: false,
+      price:     q.price,
+      change:    q.change,
+      changePct: q.changePct,
+      open:      q.open,
+      high:      q.high,
+      low:       q.low,
+      prevClose: q.prevClose,
+      pe:             fin?.pe             || null,
+      pb:             fin?.pb             || null,
+      dividendYield:  fin?.dividendYield  || null,
+      roe:            fin?.roe            || null,
+      adjustedROE:    fin?.adjustedROE    || null,
+      adjustedEquityPerShare: fin?.adjustedEquityPerShare || null,
+      support,
+      target,
+      momentum: q.change,
+      history,
+    };
+  }
+}
+
 function fmt(n, d=2) {
   if (n == null || isNaN(n)) return "—";
   return n.toLocaleString("zh-TW", { minimumFractionDigits:d, maximumFractionDigits:d });
@@ -182,16 +310,18 @@ function StockPage() {
 
   function select(sym) { setQuery(sym); setSugg([]); search(sym); }
 
-  function search(s) {
+  async function search(s) {
     const sym = (s||query).trim().toUpperCase();
     if (!sym) return;
     setLoading(true); setError(""); setStock(null);
-    setTimeout(()=>{
-      const d = MOCK_DATA[sym];
-      if (d) setStock({ symbol:sym, ...d });
-      else setError(`找不到「${sym}」，請確認代號（台股：2330，美股：TSLA，日股：7203）`);
+    try {
+      const data = await fetchStock(sym);
+      setStock(data);
+    } catch(err) {
+      setError(`找不到「${sym}」：${err.message}（台股：2330，美股：TSLA，日股：7203.T）`);
+    } finally {
       setLoading(false);
-    }, 500);
+    }
   }
 
   const bm   = stock ? calcBenchmark({ adjustedEquityPerShare:stock.adjustedEquityPerShare, adjustedROE:stock.adjustedROE/100 }) : null;
