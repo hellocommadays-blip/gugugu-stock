@@ -89,9 +89,10 @@ async function fetchStock(sym) {
 
   if (market === "TW") {
     // 台股：同時抓報價 + 財務 + 歷史
-    const [priceRes, finRes, histRes] = await Promise.all([
+    const [priceRes, finRes, epsRes, histRes] = await Promise.all([
       fetch(`/api/twse?type=price&stockNo=${sym}`).then(r=>r.json()),
       fetch(`/api/twse?type=financials&stockNo=${sym}`).then(r=>r.json()),
+      fetch(`/api/twse?type=eps&stockNo=${sym}`).then(r=>r.json()),
       fetch(`/api/twse?type=history&stockNo=${sym}`).then(r=>r.json()),
     ]);
 
@@ -99,17 +100,17 @@ async function fetchStock(sym) {
 
     const price   = priceRes.data;
     const fin     = (finRes.success && finRes.data) ? finRes.data : null;
+    const eps     = (epsRes.success && epsRes.data)  ? epsRes.data  : null;
     const history = histRes.success ? histRes.data : [];
 
-    // BWIBBU_d 直接提供 PE、PB、殖利率
+    // BWIBBU_d 提供 PE、PB、殖利率
     const pe            = fin?.pe            || null;
     const pb            = fin?.pb            || null;
     const dividendYield = fin?.dividendYield || null;
 
-    // 基準值計算需要 ROE 和每股調整淨值
-    // 目前台股 API 無法即時取得這兩個值，暫時顯示 null
-    const adjustedROE            = null;
-    const adjustedEquityPerShare = null;
+    // EPS API 提供基準值計算所需數據
+    const adjustedROE            = eps?.adjustedROE            || null;
+    const adjustedEquityPerShare = eps?.adjustedEquityPerShare || null;
 
     // 判斷 ETF（股票代號5碼以上或以0開頭）
     const isETF = sym.length >= 5 || sym.startsWith("0");
