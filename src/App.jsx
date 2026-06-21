@@ -98,28 +98,18 @@ async function fetchStock(sym) {
     if (!priceRes.success) throw new Error(priceRes.error || "查無此股票");
 
     const price   = priceRes.data;
-    const fin     = finRes.success ? finRes.data : null;
+    const fin     = (finRes.success && finRes.data) ? finRes.data : null;
     const history = histRes.success ? histRes.data : [];
 
-    // 計算 EPS、每股淨值、調整ROE
-    let adjustedROE = null;
-    let adjustedEquityPerShare = null;
-    let pe = null;
-    let bookValue = null;
+    // BWIBBU_d 直接提供 PE、PB、殖利率
+    const pe            = fin?.pe            || null;
+    const pb            = fin?.pb            || null;
+    const dividendYield = fin?.dividendYield || null;
 
-    if (fin) {
-      bookValue = fin.bookValue;
-      adjustedEquityPerShare = fin.bookValue; // 用每股淨值近似
-      // 近4季EPS加總
-      const recent4 = fin.eps?.slice(-4) || [];
-      const eps4sum = recent4.reduce((a,e)=>a+(e.eps||0), 0);
-      if (bookValue && eps4sum) {
-        adjustedROE = (eps4sum / bookValue) * 100;
-      }
-      if (price.price && eps4sum) {
-        pe = price.price / eps4sum;
-      }
-    }
+    // 基準值計算需要 ROE 和每股調整淨值
+    // 目前台股 API 無法即時取得這兩個值，暫時顯示 null
+    const adjustedROE            = null;
+    const adjustedEquityPerShare = null;
 
     // 判斷 ETF（股票代號5碼以上或以0開頭）
     const isETF = sym.length >= 5 || sym.startsWith("0");
@@ -143,8 +133,8 @@ async function fetchStock(sym) {
       low:       price.low,
       prevClose: price.prevClose,
       pe,
-      pb:              null, // TWSE OpenAPI 未提供
-      dividendYield:   null, // TWSE OpenAPI 未提供
+      pb,
+      dividendYield,
       roe:             adjustedROE,
       adjustedROE:     adjustedROE,
       adjustedEquityPerShare,
@@ -233,7 +223,7 @@ function Card({ children, style={} }) {
 }
 
 function SectionLabel({ children }) {
-  return <div style={{ fontSize: 11, color: C.faint, fontWeight: 700, letterSpacing: 2, marginBottom: 12 }}>{children}</div>;
+  return <div style={{ fontSize: 13, color: C.muted, fontWeight: 700, letterSpacing: 1.5, marginBottom: 12 }}>{children}</div>;
 }
 
 function InnerBox({ children, style={} }) {
@@ -390,7 +380,7 @@ function StockPage() {
               </div>
               {zone && !stock.isETF && (
                 <div style={{ background:zone.color+"14", border:`2px solid ${zone.color}`, borderRadius:12, padding:"12px 16px", textAlign:"center", minWidth:100 }}>
-                  <div style={{ fontSize:11, color:C.muted, marginBottom:2 }}>目前估值</div>
+                  <div style={{ fontSize:13, color:C.navy, marginBottom:2 }}>目前估值</div>
                   <div style={{ fontSize:17, fontWeight:800, color:zone.color }}>{zone.zone}</div>
                   <div style={{ fontSize:12, color:C.faint, marginTop:2 }}>×{fmt(zone.ratio)}</div>
                 </div>
@@ -400,8 +390,8 @@ function StockPage() {
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
               {[["開盤",stock.open],["昨收",stock.prevClose],["最高",stock.high],["最低",stock.low]].map(([label,val])=>(
                 <InnerBox key={label}>
-                  <div style={{ fontSize:11, color:C.muted, marginBottom:2 }}>{label}</div>
-                  <div style={{ fontSize:15, fontWeight:700, color:C.navy, fontFamily:"monospace" }}>{val!=null?`${cs}${fmt(val)}`:"—"}</div>
+                  <div style={{ fontSize:13, color:C.navy, marginBottom:2 }}>{label}</div>
+                  <div style={{ fontSize:16, fontWeight:700, color:C.navy, fontFamily:"monospace" }}>{val!=null?`${cs}${fmt(val)}`:"—"}</div>
                 </InnerBox>
               ))}
             </div>
@@ -415,11 +405,11 @@ function StockPage() {
               <SectionLabel>PRICE BANDS · 價格基準值</SectionLabel>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:12 }}>
                 <InnerBox>
-                  <div style={{ fontSize:11, color:C.muted }}>基準值</div>
+                  <div style={{ fontSize:13, color:C.navy }}>基準值</div>
                   <div style={{ fontSize:16, fontWeight:800, color:C.navy, fontFamily:"monospace" }}>{cs}{fmt(bm)}</div>
                 </InnerBox>
                 <InnerBox>
-                  <div style={{ fontSize:11, color:C.muted }}>調整ROE</div>
+                  <div style={{ fontSize:13, color:C.navy }}>調整ROE</div>
                   <div style={{ fontSize:16, fontWeight:800, color:C.accent, fontFamily:"monospace" }}>{fmt(stock.adjustedROE)}%</div>
                 </InnerBox>
               </div>
@@ -448,22 +438,22 @@ function StockPage() {
             <SectionLabel>SIGNALS · 價格訊號</SectionLabel>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
               <InnerBox>
-                <div style={{ fontSize:11, color:C.muted, marginBottom:4 }}>支撐</div>
+                <div style={{ fontSize:13, color:C.navy, marginBottom:4 }}>支撐</div>
                 <div style={{ fontSize:15, fontWeight:700, color:C.up, fontFamily:"monospace" }}>{cs}{fmt(stock.support)}</div>
                 <div style={{ fontSize:10, color:C.faint, marginTop:2 }}>距支撐 {fmt(((stock.price-stock.support)/stock.price)*100)}%</div>
               </InnerBox>
               <InnerBox>
-                <div style={{ fontSize:11, color:C.muted, marginBottom:4 }}>目標</div>
+                <div style={{ fontSize:13, color:C.navy, marginBottom:4 }}>目標</div>
                 <div style={{ fontSize:15, fontWeight:700, color:C.accent, fontFamily:"monospace" }}>{cs}{fmt(stock.target)}</div>
                 <div style={{ fontSize:10, color:C.faint, marginTop:2 }}>距目標 {fmt(((stock.target-stock.price)/stock.price)*100)}%</div>
               </InnerBox>
               <InnerBox>
-                <div style={{ fontSize:11, color:C.muted, marginBottom:4 }}>動能</div>
+                <div style={{ fontSize:13, color:C.navy, marginBottom:4 }}>動能</div>
                 <div style={{ fontSize:15, fontWeight:700, color:stock.momentum>=0?C.up:C.down, fontFamily:"monospace" }}>{cs}{fmt(stock.momentum)}</div>
                 <div style={{ fontSize:10, color:C.faint, marginTop:2 }}>單日動能</div>
               </InnerBox>
               <InnerBox>
-                <div style={{ fontSize:11, color:C.muted, marginBottom:4 }}>距基準值</div>
+                <div style={{ fontSize:13, color:C.navy, marginBottom:4 }}>距基準值</div>
                 <div style={{ fontSize:15, fontWeight:700, color:bm?C.navy:C.faint, fontFamily:"monospace" }}>
                   {bm ? `${stock.price>bm?"+":""}${fmt(((stock.price-bm)/bm)*100)}%` : "—"}
                 </div>
@@ -490,14 +480,14 @@ function StockPage() {
                 ["每股調整淨值",   stock.adjustedEquityPerShare? `${cs}${fmt(stock.adjustedEquityPerShare)}` : "—"],
               ].map(([label,val])=>(
                 <InnerBox key={label}>
-                  <div style={{ fontSize:11, color:C.muted, marginBottom:4 }}>{label}</div>
-                  <div style={{ fontSize:15, fontWeight:700, color:C.navy, fontFamily:"monospace" }}>{val}</div>
+                  <div style={{ fontSize:13, color:C.navy, marginBottom:4 }}>{label}</div>
+                  <div style={{ fontSize:16, fontWeight:700, color:C.navy, fontFamily:"monospace" }}>{val}</div>
                 </InnerBox>
               ))}
             </div>
           </Card>
 
-          <div style={{ fontSize:11, color:C.faint, textAlign:"center", padding:"4px 0 12px" }}>
+          <div style={{ fontSize:12, color:C.muted, textAlign:"center", padding:"4px 0 12px" }}>
             🕊️「股咕股」溫馨提示：本工具僅為個人開發之數據整合與指標分析統計，並非提供任何形式的投資買賣建議。市場有風險，投資需謹慎，「股咕股」只負責啼叫報時，盈虧請用戶自負。
           </div>
         </div>
@@ -646,7 +636,7 @@ function PortfolioPage() {
             ["總報酬率",  fmtPct(totPct), totPct>=0?C.up:C.down],
           ].map(([label,val,color])=>(
             <InnerBox key={label} style={{ background:"#fff" }}>
-              <div style={{ fontSize:11, color:C.muted }}>{label}</div>
+              <div style={{ fontSize:13, color:C.navy }}>{label}</div>
               <div style={{ fontSize:17, fontWeight:800, color, fontFamily:"monospace" }}>{val}</div>
             </InnerBox>
           ))}
@@ -684,7 +674,7 @@ function PortfolioPage() {
               {h.zone&&!h.d.isETF&&(
                 <span style={{ fontSize:12, color:h.zone.color, fontWeight:700, background:h.zone.color+"14", padding:"4px 10px", borderRadius:8 }}>{h.zone.zone}</span>
               )}
-              <button onClick={()=>setHoldings(hh=>hh.filter(x=>x.id!==h.id))} style={{ fontSize:11, color:C.faint, background:"transparent", border:"none", cursor:"pointer" }}>刪除</button>
+              <button onClick={()=>setHoldings(hh=>hh.filter(x=>x.id!==h.id))} style={{ fontSize:12, color:C.muted, background:"transparent", border:"none", cursor:"pointer" }}>刪除</button>
             </div>
           </div>
 
@@ -695,15 +685,15 @@ function PortfolioPage() {
               ["報酬率", fmtPct(h.pnlPct),  h.pnlPct>=0?C.up:C.down],
             ].map(([label,val,color])=>(
               <InnerBox key={label}>
-                <div style={{ fontSize:11, color:C.muted }}>{label}</div>
-                <div style={{ fontSize:14, fontWeight:700, color, fontFamily:"monospace" }}>{val}</div>
+                <div style={{ fontSize:13, color:C.navy }}>{label}</div>
+                <div style={{ fontSize:16, fontWeight:700, color, fontFamily:"monospace" }}>{val}</div>
               </InnerBox>
             ))}
           </div>
 
           {h.lots.length>1 && (
             <InnerBox style={{ marginBottom:10 }}>
-              <div style={{ fontSize:11, color:C.muted, marginBottom:6 }}>分批明細</div>
+              <div style={{ fontSize:13, color:C.navy, marginBottom:6 }}>分批明細</div>
               {h.lots.map((l,i)=>(
                 <div key={i} style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:C.muted, padding:"3px 0", borderBottom:i<h.lots.length-1?`1px solid ${C.border}`:"none" }}>
                   <span>第{i+1}批 · {l.date}</span>
@@ -733,7 +723,7 @@ function PortfolioPage() {
         </Card>
       ))}
 
-      <div style={{ fontSize:11, color:C.faint, textAlign:"center", padding:"4px 0 16px" }}>
+      <div style={{ fontSize:12, color:C.muted, textAlign:"center", padding:"4px 0 16px" }}>
         🕊️「股咕股」溫馨提示：本工具僅為個人開發之數據整合與指標分析統計，並非提供任何形式的投資買賣建議。市場有風險，投資需謹慎，「股咕股」只負責啼叫報時，盈虧請用戶自負。
       </div>
     </div>
@@ -762,7 +752,7 @@ function LoginModal({ onClose }) {
           <button style={{ padding:"12px", borderRadius:12, border:`1.5px solid ${C.border}`, background:C.surface2, color:C.navy, fontWeight:600, fontSize:14, cursor:"pointer" }}>
             🔵 使用 Google 登入
           </button>
-          <div style={{ fontSize:11, color:C.faint, textAlign:"center", marginTop:4 }}>
+          <div style={{ fontSize:12, color:C.muted, textAlign:"center", marginTop:4 }}>
             登入後可跨裝置同步持倉資料
           </div>
         </div>
