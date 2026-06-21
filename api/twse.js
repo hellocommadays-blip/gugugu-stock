@@ -122,7 +122,7 @@ export default async function handler(req, res) {
           return;
         }
 
-        // 欄位：[代號, 名稱, 殖利率, 股利年度, 本益比, 股價淨值比, 財報年/季]
+        // 正確欄位：[0]代號 [1]名稱 [2]收盤價 [3]殖利率 [4]股利年度 [5]本益比 [6]股價淨值比 [7]財報年季
         const row = raw.data.find(d => d[0] === stockNo);
         if (!row) {
           res.status(200).json({ success:true, data:null, note:'查無此股票財務資料' });
@@ -130,9 +130,9 @@ export default async function handler(req, res) {
         }
 
         data = {
-          dividendYield: parseFloat(row[2]) || null,
-          pe:            parseFloat(row[4]) || null,
-          pb:            parseFloat(row[5]) || null,
+          dividendYield: parseFloat(row[3]) || null,  // 殖利率
+          pe:            parseFloat(row[5]) || null,  // 本益比
+          pb:            parseFloat(row[6]) || null,  // 股價淨值比
         };
         break;
       }
@@ -215,15 +215,15 @@ export default async function handler(req, res) {
           return;
         }
 
-        // BWIBBU_d 欄位：[代號, 名稱, 殖利率, 股利年度, 本益比, 股價淨值比, 財報年/季]
-        // row[4]=本益比, row[5]=股價淨值比
-        // 注意：台積電 PE≈32, PB≈10，用 PB 反推每股淨值較準確
-        const pe = parseFloat(row[4]) || null;  // 本益比
-        const pb = parseFloat(row[5]) || null;  // 股價淨值比
+        // BWIBBU_d 正確欄位：
+        // [0]代號 [1]名稱 [2]收盤價 [3]殖利率 [4]股利年度 [5]本益比 [6]股價淨值比 [7]財報年季
+        const pe = parseFloat(row[5]) || null;  // 本益比（正確欄位）
+        const pb = parseFloat(row[6]) || null;  // 股價淨值比（正確欄位）
+        const dividendYieldRaw = parseFloat(row[3]) || null; // 殖利率
 
         // 反推：EPS = 股價 / PE，每股淨值 = 股價 / PB
-        const eps       = (pe && currentPrice && pe < 200) ? currentPrice / pe : null;
-        const bookValue = (pb && currentPrice && pb < 50)  ? currentPrice / pb : null;
+        const eps       = (pe && currentPrice) ? currentPrice / pe : null;
+        const bookValue = (pb && currentPrice) ? currentPrice / pb : null;
 
         // 調整ROE ≈ EPS / 每股淨值（近似值，非精確財報數字）
         const adjustedROE = (eps && bookValue) ? (eps / bookValue) * 100 : null;
