@@ -247,7 +247,7 @@ function ValuationBar({ price, benchmark }) {
       <div style={{ position: "relative", height: 8, borderRadius: 4, background: `linear-gradient(to right,${C.z0},${C.z1},${C.z2},${C.z3},${C.z4},${C.z5})`, overflow: "visible" }}>
         <div style={{ position:"absolute", left:`${pct}%`, top:"50%", transform:"translate(-50%,-50%)", width:16, height:16, borderRadius:"50%", background:C.surface, border:`3px solid ${C.navy}`, boxShadow:`0 0 0 2px ${C.surface}`, zIndex:2 }} />
       </div>
-      <div style={{ display:"flex", justifyContent:"space-between", marginTop:5, fontSize:10, color:C.faint }}>
+      <div style={{ display:"flex", justifyContent:"space-between", marginTop:5, fontSize:12, color:C.muted }}>
         {["極低估","低估","合理","偏高","高估","泡沫"].map(l => <span key={l}>{l}</span>)}
       </div>
     </div>
@@ -266,8 +266,8 @@ function KLineChart({ history, support, target, currSym }) {
       <SectionLabel>DAILY K · 歷史走勢（近60日）</SectionLabel>
       <ResponsiveContainer width="100%" height={180}>
         <LineChart data={history} margin={{ top:4, right:8, left:0, bottom:0 }}>
-          <XAxis dataKey="date" tick={{ fontSize:10, fill:C.faint }} interval={11} />
-          <YAxis domain={[minP,maxP]} tick={{ fontSize:10, fill:C.faint }} width={62}
+          <XAxis dataKey="date" tick={{ fontSize:11, fill:C.muted }} interval={11} />
+          <YAxis domain={[minP,maxP]} tick={{ fontSize:11, fill:C.muted }} width={62}
             tickFormatter={v=>{
               if (v >= 1000000) return `${currSym}${(v/1000000).toFixed(1)}M`;
               if (v >= 1000)    return `${currSym}${(v/1000).toFixed(1)}K`;
@@ -420,19 +420,22 @@ function StockPage() {
                 </InnerBox>
               </div>
               {[
-                { label:"極低估區", color:C.z0, lo:0,       hi:bm*0.85 },
-                { label:"低估區",   color:C.z1, lo:bm*0.85, hi:bm*1.00 },
-                { label:"合理區",   color:C.z2, lo:bm*1.00, hi:bm*1.15 },
-                { label:"偏高區",   color:C.z3, lo:bm*1.15, hi:bm*1.30 },
-                { label:"高估區",   color:C.z4, lo:bm*1.30, hi:bm*2.00 },
-                { label:"泡沫區",   color:C.z5, lo:bm*2.00, hi:null     },
+                { label:"極低估區", color:C.z0, lo:0,       hi:bm*0.85, mult:"× 0.85 以下" },
+                { label:"低估區",   color:C.z1, lo:bm*0.85, hi:bm*1.00, mult:"× 0.85 ～ 1.0" },
+                { label:"合理區",   color:C.z2, lo:bm*1.00, hi:bm*1.15, mult:"× 1.0 ～ 1.15" },
+                { label:"偏高區",   color:C.z3, lo:bm*1.15, hi:bm*1.30, mult:"× 1.15 ～ 1.3" },
+                { label:"高估區",   color:C.z4, lo:bm*1.30, hi:bm*2.00, mult:"× 1.3 ～ 2.0" },
+                { label:"泡沫區",   color:C.z5, lo:bm*2.00, hi:null,     mult:"× 2.0 以上" },
               ].map(z=>{
                 const isCurr = zone && zone.zone===z.label;
                 const range  = z.hi ? `${cs}${fmt(z.lo)} ～ ${cs}${fmt(z.hi)}` : `${cs}${fmt(z.lo)} ～ 無限`;
                 return (
-                  <div key={z.label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 12px", borderRadius:10, marginBottom:6, background:isCurr?z.color+"14":C.surface2, border:`1.5px solid ${isCurr?z.color:C.border}` }}>
-                    <span style={{ fontSize:13, fontWeight:isCurr?800:500, color:z.color }}>{z.label}{isCurr?" ← 目前":""}</span>
-                    <span style={{ fontSize:12, color:C.muted, fontFamily:"monospace" }}>{range}</span>
+                  <div key={z.label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"12px 14px", borderRadius:10, marginBottom:6, background:isCurr?z.color+"14":C.surface2, border:`1.5px solid ${isCurr?z.color:C.border}` }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                      <span style={{ fontSize:14, fontWeight:isCurr?800:600, color:z.color }}>{z.label}{isCurr?" ← 目前":""}</span>
+                      <span style={{ fontSize:12, color:C.faint }}>{z.mult}</span>
+                    </div>
+                    <span style={{ fontSize:13, color:C.muted, fontFamily:"monospace" }}>{range}</span>
                   </div>
                 );
               })}
@@ -446,24 +449,24 @@ function StockPage() {
               <InnerBox>
                 <div style={{ fontSize:13, color:C.navy, marginBottom:4 }}>支撐</div>
                 <div style={{ fontSize:15, fontWeight:700, color:C.up, fontFamily:"monospace" }}>{cs}{fmt(stock.support)}</div>
-                <div style={{ fontSize:10, color:C.faint, marginTop:2 }}>距支撐 {fmt(((stock.price-stock.support)/stock.price)*100)}%</div>
+                <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>距支撐 {fmt(((stock.price-stock.support)/stock.price)*100)}%</div>
               </InnerBox>
               <InnerBox>
                 <div style={{ fontSize:13, color:C.navy, marginBottom:4 }}>目標</div>
                 <div style={{ fontSize:15, fontWeight:700, color:C.accent, fontFamily:"monospace" }}>{cs}{fmt(stock.target)}</div>
-                <div style={{ fontSize:10, color:C.faint, marginTop:2 }}>距目標 {fmt(((stock.target-stock.price)/stock.price)*100)}%</div>
+                <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>距目標 {fmt(((stock.target-stock.price)/stock.price)*100)}%</div>
               </InnerBox>
               <InnerBox>
                 <div style={{ fontSize:13, color:C.navy, marginBottom:4 }}>動能</div>
                 <div style={{ fontSize:15, fontWeight:700, color:stock.momentum>=0?C.up:C.down, fontFamily:"monospace" }}>{cs}{fmt(stock.momentum)}</div>
-                <div style={{ fontSize:10, color:C.faint, marginTop:2 }}>單日動能</div>
+                <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>單日動能</div>
               </InnerBox>
               <InnerBox>
                 <div style={{ fontSize:13, color:C.navy, marginBottom:4 }}>距基準值</div>
                 <div style={{ fontSize:15, fontWeight:700, color:bm?C.navy:C.faint, fontFamily:"monospace" }}>
                   {bm ? `${stock.price>bm?"+":""}${fmt(((stock.price-bm)/bm)*100)}%` : "—"}
                 </div>
-                <div style={{ fontSize:10, color:C.faint, marginTop:2 }}>相對基準值</div>
+                <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>相對基準值</div>
               </InnerBox>
             </div>
           </Card>
@@ -786,7 +789,7 @@ export default function App() {
 
       {/* Header */}
       <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"14px 16px", position:"sticky", top:0, zIndex:50, boxShadow:"0 2px 12px #1E3A5F0A" }}>
-        <div style={{ maxWidth:680, margin:"0 auto" }}>
+        <div style={{ maxWidth:960, margin:"0 auto" }}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
             <div style={{ display:"flex", alignItems:"center", gap:10 }}>
               <span style={{ fontSize:26 }}>🕊️</span>
@@ -794,7 +797,7 @@ export default function App() {
                 <div style={{ fontSize:18, fontWeight:900, background:`linear-gradient(90deg,${C.accentDark},${C.accent})`, WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>
                   全民股咕股
                 </div>
-                <div style={{ fontSize:10, color:C.faint }}>台美日股 AI 巡檢助理</div>
+                <div style={{ fontSize:12, color:C.muted }}>台美日股 AI 巡檢助理</div>
               </div>
             </div>
             <button onClick={()=>setShowLogin(true)} style={{ padding:"7px 16px", borderRadius:20, border:`1.5px solid ${C.accent}`, background:"transparent", color:C.accent, fontSize:13, fontWeight:600, cursor:"pointer" }}>
@@ -812,7 +815,7 @@ export default function App() {
       </div>
 
       {/* Content */}
-      <div style={{ maxWidth:680, margin:"0 auto", padding:"18px 14px 40px" }}>
+      <div style={{ maxWidth:960, margin:"0 auto", padding:"18px 14px 40px" }}>
         {tab==="stock"     && <StockPage />}
         {tab==="screener"  && <ScreenerPage />}
         {tab==="portfolio" && <PortfolioPage />}
