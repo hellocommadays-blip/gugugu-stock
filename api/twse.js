@@ -180,57 +180,58 @@ export default async function handler(req, res) {
       }
 
       // ── 每股盈餘 + 每股淨值（用來算基準值）────────────────
-      // 使用 TWSE 官方每季財務摘要
+      // 使用 goodinfo.tw 或 statementdog 的公開資料
+      // 改用 TWSE 每日行情附帶的本益比反推 EPS
       case 'eps': {
-        // 用近期月營收頁面抓EPS和每股淨值
-        // t187ap06_L = 最近季EPS，t187ap04_L = 每股淨值
-        const [r1, r2] = await Promise.all([
-          fetch(`https://openapi.twse.com.tw/v1/opendata/t187ap06_L`, {
-            headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' }
-          }),
-          fetch(`https://openapi.twse.com.tw/v1/opendata/t187ap04_L`, {
-            headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' }
-          }),
-        ]);
+        // 策略：用 BWIBBU_d 的 PE × 收盤價 反推 EPS
+        // 再用 PB × 收盤價 反推每股淨值
+        // 然後算出調整ROE = EPS / 每股淨值
 
-        const [raw1, raw2] = await Promise.all([r1.json(), r2.json()]);
+        // 先抓今日報價
+        const priceUrl = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_${stockNo}.tw&json=1&delay=0`;
+        const priceR   = await fetch(priceUrl, {
+          headers: { 'Referer': 'https://mis.twse.com.tw/stock/fibest.html', 'User-Agent': 'Mozilla/5.0' }
+        });
+        const priceRaw = await priceR.json();
+        const item     = priceRaw?.msgArray?.[0];
+        const currentPrice = item ? (parseFloat(item.z) > 0 ? parseFloat(item.z) : parseFloat(item.y)) : null;
 
-        // EPS 近4季
-        const epsRows = Array.isArray(raw1) ? raw1.filter(d => d['公司代號'] === stockNo) : [];
-        // 每股淨值
-        const bvRow   = Array.isArray(raw2) ? raw2.find(d  => d['公司代號'] === stockNo) : null;
+        // 再抓 BWIBBU_d
+        let finRaw = null;
+        for (let i = 1; i <= 7; i++) {
+          const d = new Date();
+          d.setDate(d.getDate() - i);
+          if (d.getDay() === 0 || d.getDay() === 6) continue;
+          const dateStr = d.toISOString().slice(0,10).replace(/-/g,'');
+          const r = await fetch(`https://www.twse.com.tw/rwd/zh/afterTrading/BWIBBU_d?date=${dateStr}&selectType=ALL&response=json`);
+          finRaw = await r.json();
+          if (finRaw?.data?.length) break;
+          finRaw = null;
+        }
 
-        if (!bvRow && epsRows.length === 0) {
+        const row = finRaw?.data?.find(d => d[0] === stockNo);
+        if (!row || !currentPrice) {
           res.status(200).json({ success: true, data: null, note: '查無財務資料' });
           return;
         }
 
-        // 近4季EPS加總
-        const recent4  = epsRows.slice(-4);
-        const eps4sum  = recent4.reduce((a, e) => a + (parseFloat(e['基本每股盈餘（元）']) || 0), 0);
-        const bookValue = bvRow ? parseFloat(bvRow['每股淨值']) || null : null;
-        const equity    = bvRow ? parseFloat((bvRow['股東權益合計'] || '').replace(/,/g, '')) || null : null;
-        const shares    = bvRow ? parseFloat((bvRow['普通股股數（千股）'] || '').replace(/,/g, '')) || null : null;
+        const pe = parseFloat(row[4]) || null;
+        const pb = parseFloat(row[5]) || null;
 
-        // 調整ROE = 近4季EPS / 每股淨值
-        const adjustedROE = (bookValue && eps4sum) ? (eps4sum / bookValue) * 100 : null;
+        // 反推：EPS = 股價 / PE，每股淨值 = 股價 / PB
+        const eps       = (pe && currentPrice) ? currentPrice / pe : null;
+        const bookValue = (pb && currentPrice) ? currentPrice / pb : null;
 
-        // 基準值 = 每股淨值 × 調整ROE × 10
-        const benchmark = (bookValue && adjustedROE) ? bookValue * (adjustedROE / 100) * 10 : null;
+        // 調整ROE ≈ EPS / 每股淨值（近似值，非精確財報數字）
+        const adjustedROE = (eps && bookValue) ? (eps / bookValue) * 100 : null;
 
         data = {
-          eps4sum,
+          eps,
           bookValue,
-          equity,
-          shares,
           adjustedROE,
           adjustedEquityPerShare: bookValue,
-          benchmark,
-          epsDetail: recent4.map(e => ({
-            year:    e['年度'],
-            quarter: e['季別'],
-            eps:     parseFloat(e['基本每股盈餘（元）']) || null,
-          })),
+          benchmark: bookValue && adjustedROE ? bookValue * (adjustedROE / 100) * 10 : null,
+          note: '基於 PE/PB 反推，為近似值',
         };
         break;
       }
