@@ -267,8 +267,13 @@ function KLineChart({ history, support, target, currSym }) {
       <ResponsiveContainer width="100%" height={180}>
         <LineChart data={history} margin={{ top:4, right:8, left:0, bottom:0 }}>
           <XAxis dataKey="date" tick={{ fontSize:10, fill:C.faint }} interval={11} />
-          <YAxis domain={[minP,maxP]} tick={{ fontSize:10, fill:C.faint }} width={55}
-            tickFormatter={v=>`${currSym}${v>=1000?(v/1000).toFixed(1)+"K":v}`} />
+          <YAxis domain={[minP,maxP]} tick={{ fontSize:10, fill:C.faint }} width={62}
+            tickFormatter={v=>{
+              if (v >= 1000000) return `${currSym}${(v/1000000).toFixed(1)}M`;
+              if (v >= 1000)    return `${currSym}${(v/1000).toFixed(1)}K`;
+              if (v >= 100)     return `${currSym}${Math.round(v)}`;
+              return `${currSym}${v.toFixed(2)}`;
+            }} />
           <Tooltip contentStyle={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, fontSize:12, color:C.navy }}
             labelStyle={{ color:C.muted }} formatter={v=>[`${currSym}${fmt(v)}`,"價格"]} />
           {support && <ReferenceLine y={support} stroke={C.up}   strokeDasharray="4 2" label={{ value:"支撐", fill:C.up,   fontSize:10, position:"right" }} />}
