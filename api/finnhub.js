@@ -93,35 +93,41 @@ export default async function handler(req, res) {
         return;
       }
 
-      // ── 歷史走勢（近60日）────────────────────────────────
+      // ── 歷史走勢（近60日）— Alpha Vantage ──────────────
       case 'history': {
-        const to   = Math.floor(Date.now() / 1000);
-        const from = to - 90 * 24 * 60 * 60; // 90天前（抓多一點保險）
-        const url  = `${BASE}/stock/candle?symbol=${fhSymbol}&resolution=D&from=${from}&to=${to}&token=${FINNHUB_KEY}`;
-        const r    = await fetch(url);
-        const raw  = await r.json();
-
-        // debug：回傳原始資料幫助診斷
-        if (raw?.s !== 'ok' || !raw?.t?.length) {
-          res.status(200).json({
-            success: true,
-            data: [],
-            note: `無歷史資料`,
-            debug: { status: raw?.s, url, rawKeys: Object.keys(raw || {}) }
-          });
+        const AV_KEY = process.env.ALPHAVANTAGE_API_KEY;
+        if (!AV_KEY) {
+          res.status(500).json({ error: 'ALPHAVANTAGE_API_KEY 未設定' });
           return;
         }
 
-        const data = raw.t.map((ts, i) => {
-          const d = new Date(ts * 1000);
-          return {
-            date:  `${d.getMonth()+1}/${d.getDate()}`,
-            price: raw.c?.[i] || null,
-            open:  raw.o?.[i] || null,
-            high:  raw.h?.[i] || null,
-            low:   raw.l?.[i] || null,
-          };
-        }).filter(d => d.price);
+        // Alpha Vantage TIME_SERIES_DAILY
+        const avSymbol = market === 'JP' ? `${symbol}.TYO` : symbol.toUpperCase();
+        const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${avSymbol}&outputsize=compact&apikey=${AV_KEY}`;
+        const r   = await fetch(url);
+        const raw = await r.json();
+
+        const timeSeries = raw?.['Time Series (Daily)'];
+        if (!timeSeries) {
+          res.status(200).json({ success: true, data: [], note: '無歷史資料' });
+          return;
+        }
+
+        // 取最近60筆，轉成我們的格式
+        const data = Object.entries(timeSeries)
+          .slice(0, 60)
+          .reverse()
+          .map(([dateStr, values]) => {
+            const d = new Date(dateStr);
+            return {
+              date:  `${d.getMonth()+1}/${d.getDate()}`,
+              price: parseFloat(values['4. close'])  || null,
+              open:  parseFloat(values['1. open'])   || null,
+              high:  parseFloat(values['2. high'])   || null,
+              low:   parseFloat(values['3. low'])    || null,
+            };
+          })
+          .filter(d => d.price);
 
         res.status(200).json({ success: true, data });
         return;
