@@ -104,14 +104,21 @@ export default async function handler(req, res) {
 
       // ── 財務數據（TWSE 每日本益比、殖利率、股價淨值比）──
       case 'financials': {
-        // BWIBBU_d：每日收盤後更新，包含 PE、殖利率、PB
-        const today = new Date().toISOString().slice(0,10).replace(/-/g,'');
-        const url   = `https://www.twse.com.tw/rwd/zh/afterTrading/BWIBBU_d?date=${today}&selectType=ALL&response=json`;
-        const r     = await fetch(url);
-        const raw   = await r.json();
+        // BWIBBU_d：每日收盤後更新，往回找最近交易日（跳過週末）
+        let raw = null;
+        for (let i = 1; i <= 7; i++) {
+          const d = new Date();
+          d.setDate(d.getDate() - i);
+          if (d.getDay() === 0 || d.getDay() === 6) continue;
+          const dateStr = d.toISOString().slice(0,10).replace(/-/g,'');
+          const r = await fetch(`https://www.twse.com.tw/rwd/zh/afterTrading/BWIBBU_d?date=${dateStr}&selectType=ALL&response=json`);
+          raw = await r.json();
+          if (raw?.data?.length) break;
+          raw = null;
+        }
 
         if (!raw?.data) {
-          res.status(200).json({ success:true, data:null, note:'今日財務資料未更新' });
+          res.status(200).json({ success:true, data:null, note:'近期無財務資料' });
           return;
         }
 
