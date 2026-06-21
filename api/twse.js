@@ -215,12 +215,15 @@ export default async function handler(req, res) {
           return;
         }
 
-        const pe = parseFloat(row[4]) || null;
-        const pb = parseFloat(row[5]) || null;
+        // BWIBBU_d 欄位：[代號, 名稱, 殖利率, 股利年度, 本益比, 股價淨值比, 財報年/季]
+        // row[4]=本益比, row[5]=股價淨值比
+        // 注意：台積電 PE≈32, PB≈10，用 PB 反推每股淨值較準確
+        const pe = parseFloat(row[4]) || null;  // 本益比
+        const pb = parseFloat(row[5]) || null;  // 股價淨值比
 
         // 反推：EPS = 股價 / PE，每股淨值 = 股價 / PB
-        const eps       = (pe && currentPrice) ? currentPrice / pe : null;
-        const bookValue = (pb && currentPrice) ? currentPrice / pb : null;
+        const eps       = (pe && currentPrice && pe < 200) ? currentPrice / pe : null;
+        const bookValue = (pb && currentPrice && pb < 50)  ? currentPrice / pb : null;
 
         // 調整ROE ≈ EPS / 每股淨值（近似值，非精確財報數字）
         const adjustedROE = (eps && bookValue) ? (eps / bookValue) * 100 : null;
@@ -232,6 +235,30 @@ export default async function handler(req, res) {
           adjustedEquityPerShare: bookValue,
           benchmark: bookValue && adjustedROE ? bookValue * (adjustedROE / 100) * 10 : null,
           note: '基於 PE/PB 反推，為近似值',
+        };
+        break;
+      }
+
+      // ── Debug：看 BWIBBU_d 原始欄位 ─────────────────────
+      case 'rawbwibbu': {
+        let raw = null;
+        for (let i = 1; i <= 7; i++) {
+          const d = new Date();
+          d.setDate(d.getDate() - i);
+          if (d.getDay() === 0 || d.getDay() === 6) continue;
+          const dateStr = d.toISOString().slice(0,10).replace(/-/g,'');
+          const r = await fetch(`https://www.twse.com.tw/rwd/zh/afterTrading/BWIBBU_d?date=${dateStr}&selectType=ALL&response=json`);
+          raw = await r.json();
+          if (raw?.data?.length) break;
+          raw = null;
+        }
+        const row = raw?.data?.find(d => d[0] === stockNo);
+        if (!row) { res.status(404).json({ error: '查無資料' }); return; }
+        // 回傳所有欄位和標題
+        data = {
+          fields:  raw.fields || [],
+          row:     row,
+          indexed: Object.fromEntries(row.map((v,i) => [i, v])),
         };
         break;
       }
