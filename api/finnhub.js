@@ -96,12 +96,19 @@ export default async function handler(req, res) {
       // ── 歷史走勢（近60日）────────────────────────────────
       case 'history': {
         const to   = Math.floor(Date.now() / 1000);
-        const from = to - 60 * 24 * 60 * 60; // 60天前
-        const r    = await fetch(`${BASE}/stock/candle?symbol=${fhSymbol}&resolution=D&from=${from}&to=${to}&token=${FINNHUB_KEY}`);
+        const from = to - 90 * 24 * 60 * 60; // 90天前（抓多一點保險）
+        const url  = `${BASE}/stock/candle?symbol=${fhSymbol}&resolution=D&from=${from}&to=${to}&token=${FINNHUB_KEY}`;
+        const r    = await fetch(url);
         const raw  = await r.json();
 
+        // debug：回傳原始資料幫助診斷
         if (raw?.s !== 'ok' || !raw?.t?.length) {
-          res.status(200).json({ success: true, data: [], note: '無歷史資料' });
+          res.status(200).json({
+            success: true,
+            data: [],
+            note: `無歷史資料`,
+            debug: { status: raw?.s, url, rawKeys: Object.keys(raw || {}) }
+          });
           return;
         }
 
