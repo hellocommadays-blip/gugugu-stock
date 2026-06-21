@@ -146,21 +146,21 @@ async function fetchStock(sym) {
     };
 
   } else {
-    // 美股/日股：Yahoo Finance
+    // 美股/日股：Finnhub
     const isJP = sym.endsWith(".T");
     const cleanSym = isJP ? sym.replace(".T","") : sym;
     const mkt = isJP ? "JP" : "US";
 
     const [quoteRes, finRes, histRes] = await Promise.all([
-      fetch(`/api/yahoo?symbol=${cleanSym}&market=${mkt}&type=quote`).then(r=>r.json()),
-      fetch(`/api/yahoo?symbol=${cleanSym}&market=${mkt}&type=financials`).then(r=>r.json()),
-      fetch(`/api/yahoo?symbol=${cleanSym}&market=${mkt}&type=history`).then(r=>r.json()),
+      fetch(`/api/finnhub?symbol=${cleanSym}&market=${mkt}&type=quote`).then(r=>r.json()),
+      fetch(`/api/finnhub?symbol=${cleanSym}&market=${mkt}&type=financials`).then(r=>r.json()),
+      fetch(`/api/finnhub?symbol=${cleanSym}&market=${mkt}&type=history`).then(r=>r.json()),
     ]);
 
     if (!quoteRes.success) throw new Error(quoteRes.error || "查無此股票");
 
     const q   = quoteRes.data;
-    const fin = finRes.success ? finRes.data : null;
+    const fin = (finRes.success && finRes.data) ? finRes.data : null;
     const history = histRes.success ? histRes.data : [];
 
     const recentPrices = history.slice(-20).map(h=>h.price).filter(Boolean);
