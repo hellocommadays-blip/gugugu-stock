@@ -464,6 +464,94 @@ export default async function handler(req, res) {
         break;
       }
 
+      // ── 全市場選股（BWIBBU_d 近似基準值）────────────────
+      case 'screener': {
+        // 抓最近交易日的全市場本益比、殖利率、股價淨值比
+        const tradingDates = getLastTradingDates(3);
+        let raw = null;
+        for (const dateStr of tradingDates) {
+          const url = `https://www.twse.com.tw/rwd/zh/afterTrading/BWIBBU_d?date=${dateStr}&selectType=ALL&response=json`;
+          const r   = await fetch(url);
+          raw = await r.json();
+          if (raw?.data?.length) break;
+          raw = null;
+        }
+
+        if (!raw?.data) {
+          res.status(200).json({ success: true, data: [], note: '無市場資料' });
+          return;
+        }
+
+        // 同時抓當日收盤行情（含漲跌）
+        const today = getTWDate(0);
+        const priceUrl = `https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=${today}&type=ALLBUT0999&response=json`;
+        const priceR   = await fetch(priceUrl);
+        const priceRaw = await priceR.json();
+
+        // 建立股價對照表
+        const priceMap = {};
+        if (priceRaw?.data) {
+          priceRaw.data.forEach(row => {
+            if (row[0] && row[2]) {
+              priceMap[row[0]] = {
+                price:     parseFloat(row[8]?.replace(/,/g,''))  || null,
+                change:    parseFloat(row[10]?.replace(/[▲▼+\-,]/g,'')) || null,
+                changePct: parseFloat(row[11]?.replace(/[%,]/g,'')) || null,
+              };
+            }
+          });
+        }
+
+        // 計算每支股票的近似基準值
+        const results = raw.data
+          .filter(row => row[0] && row[5] && row[6]) // 有代號、PE、PB
+          .map(row => {
+            const symbol  = row[0];
+            const name    = row[1];
+            const price   = parseFloat(row[2]?.replace(/,/g,'')) || 0;
+            const divYield = parseFloat(row[3]) || null;
+            const pe      = parseFloat(row[5]) || null;
+            const pb      = parseFloat(row[6]) || null;
+
+            if (!pe || !pb || price === 0) return null;
+
+            // 近似計算
+            const eps       = price / pe;           // 近似EPS
+            const bookValue = price / pb;           // 近似每股淨值
+            const approxROE = (eps / bookValue) * 100; // 近似ROE
+            const benchmark = bookValue * (approxROE / 100) * 10; // 近似基準值
+
+            const ratio = price / benchmark;
+            let zone = '';
+            if      (ratio < 0.85) zone = '極低估區';
+            else if (ratio < 1.00) zone = '低估區';
+            else if (ratio < 1.15) zone = '合理區';
+            else if (ratio < 1.30) zone = '偏高區';
+            else if (ratio < 2.00) zone = '高估區';
+            else                   zone = '泡沫區';
+
+            const priceInfo = priceMap[symbol] || {};
+
+            return {
+              symbol,
+              name,
+              price,
+              change:    priceInfo.change    || null,
+              changePct: priceInfo.changePct || null,
+              pe,
+              pb,
+              divYield,
+              benchmark: Math.round(benchmark * 100) / 100,
+              ratio:     Math.round(ratio * 100) / 100,
+              zone,
+            };
+          })
+          .filter(Boolean);
+
+        res.status(200).json({ success: true, data: results, date: raw.date });
+        break;
+      }
+
       default:
         res.status(400).json({ error: `未知 type: ${type}` });
         return;
