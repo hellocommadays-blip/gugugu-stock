@@ -561,29 +561,51 @@ function PortfolioPage({ user }) {
     loadHoldings();
   }, [user]);
 
-  // 載入完持倉後，抓每支股票即時價格
+  // 載入完持倉後：抓即時價格 + 自動修正名稱
   useEffect(() => {
     if (holdings.length === 0) return;
-    async function fetchPrices() {
+    async function fetchPricesAndFixNames() {
       const newPrices = {};
       await Promise.all(holdings.map(async h => {
         try {
           const market = detectMarket(h.symbol);
+          let stockName = null;
+          let price = 0;
+
           if (market === "TW") {
             const r = await fetch(`/api/twse?type=price&stockNo=${h.symbol}`);
             const data = await r.json();
-            if (data.success) newPrices[h.symbol] = data.data.price;
+            if (data.success) {
+              price = data.data.price;
+              stockName = data.data.name;
+            }
           } else {
             const r = await fetch(`/api/finnhub?symbol=${h.symbol}&market=US&type=quote`);
             const data = await r.json();
-            if (data.success) newPrices[h.symbol] = data.data.price;
+            if (data.success) {
+              price = data.data.price;
+              stockName = data.data.name;
+            }
+          }
+
+          newPrices[h.symbol] = price;
+
+          // 如果名稱等於代號（舊資料），自動更新到 Supabase
+          if (stockName && stockName !== h.symbol && h.name === h.symbol && user) {
+            await supabase
+              .from("holdings")
+              .update({ name: stockName })
+              .eq("user_id", user.id)
+              .eq("symbol", h.symbol);
           }
         } catch (_) {}
       }));
       setPrices(newPrices);
+      // 如果有名稱被修正，重新載入
+      if (user) loadHoldings();
     }
-    fetchPrices();
-  }, [holdings]);
+    fetchPricesAndFixNames();
+  }, [holdings.length]);
 
   async function loadHoldings() {
     setLoading(true);
@@ -615,9 +637,23 @@ function PortfolioPage({ user }) {
     const market = detectMarket(sym);
     const lot = { shares: +addForm.shares, cost: +addForm.cost, date: addForm.date || new Date().toISOString().slice(0,10) };
 
+    // 先抓股票名稱
+    let stockName = sym;
+    try {
+      if (market === "TW") {
+        const r = await fetch(`/api/twse?type=price&stockNo=${sym}`);
+        const d = await r.json();
+        if (d.success) stockName = d.data.name || sym;
+      } else {
+        const r = await fetch(`/api/finnhub?symbol=${sym}&market=US&type=quote`);
+        const d = await r.json();
+        if (d.success) stockName = d.data.name || sym;
+      }
+    } catch (_) {}
+
     if (user) {
       const { error } = await supabase.from("holdings").insert({
-        user_id: user.id, symbol: sym, market, name: sym, shares: lot.shares, cost: lot.cost, date: lot.date
+        user_id: user.id, symbol: sym, market, name: stockName, shares: lot.shares, cost: lot.cost, date: lot.date
       });
       if (!error) { loadHoldings(); }
     } else {
@@ -626,7 +662,7 @@ function PortfolioPage({ user }) {
       if (existing) {
         newHoldings = holdings.map(h => h.symbol === sym ? { ...h, lots: [...h.lots, lot] } : h);
       } else {
-        newHoldings = [...holdings, { id: sym, symbol: sym, market, name: sym, lots: [lot] }];
+        newHoldings = [...holdings, { id: sym, symbol: sym, market, name: stockName, lots: [lot] }];
       }
       setHoldings(newHoldings);
       saveLocal(newHoldings);
@@ -734,7 +770,9 @@ function PortfolioPage({ user }) {
             <div>
               <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom:4 }}>
                 <span style={{ fontSize:16, fontWeight:800, color:C.navy }}>{h.symbol}</span>
-                <span style={{ fontSize:14, color:C.muted }}>{h.name}</span>
+                {h.name && h.name !== h.symbol && (
+                  <span style={{ fontSize:14, color:C.muted }}>{h.name}</span>
+                )}
                 <Tag color={C.navyMid}>{ML[h.market]||"台股"}</Tag>
               </div>
               <div style={{ fontSize:12, color:C.muted }}>{h.totalShares.toLocaleString()} 股 · 均價 {h.cs}{fmt(h.avgCost)} · {h.lots.length} 批</div>
