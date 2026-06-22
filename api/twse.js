@@ -359,6 +359,21 @@ export default async function handler(req, res) {
         break;
       }
 
+      // ── Debug：看 FinMind 資產負債表 ───────────────────
+      case 'rawbalance': {
+        const FINMIND_TOKEN = process.env.FINMIND_API_TOKEN;
+        const url = `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockBalanceSheet&data_id=${stockNo}&start_date=2024-01-01&token=${FINMIND_TOKEN}`;
+        const r   = await fetch(url);
+        const raw = await r.json();
+        const types = [...new Set((raw?.data||[]).map(d => d.type))];
+        // 找股東權益相關欄位
+        const equity = (raw?.data||[]).filter(d =>
+          d.type.toLowerCase().includes('equity') || d.type.includes('Equity') || d.type.includes('equity')
+        ).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,10);
+        data = { types: types.slice(0,30), equitySamples: equity };
+        break;
+      }
+
       // ── Debug：看 BWIBBU_d 原始欄位 ─────────────────────
       case 'rawbwibbu': {
         let raw = null;
