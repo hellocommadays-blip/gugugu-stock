@@ -89,19 +89,23 @@ async function fetchStock(sym) {
 
   if (market === "TW") {
     // 台股：同時抓報價 + 財務 + 歷史
-    const [priceRes, finRes, epsRes, histRes] = await Promise.all([
+    const [priceRes, finRes, epsRes, histRes, instRes, marginRes] = await Promise.all([
       fetch(`/api/twse?type=price&stockNo=${sym}`).then(r=>r.json()),
       fetch(`/api/twse?type=financials&stockNo=${sym}`).then(r=>r.json()),
       fetch(`/api/twse?type=eps&stockNo=${sym}`).then(r=>r.json()),
       fetch(`/api/twse?type=history&stockNo=${sym}`).then(r=>r.json()),
+      fetch(`/api/twse?type=institutional&stockNo=${sym}`).then(r=>r.json()),
+      fetch(`/api/twse?type=margin&stockNo=${sym}`).then(r=>r.json()),
     ]);
 
     if (!priceRes.success) throw new Error(priceRes.error || "查無此股票");
 
-    const price   = priceRes.data;
-    const fin     = (finRes.success && finRes.data) ? finRes.data : null;
-    const eps     = (epsRes.success && epsRes.data)  ? epsRes.data  : null;
-    const history = histRes.success ? histRes.data : [];
+    const price      = priceRes.data;
+    const fin        = (finRes.success && finRes.data)    ? finRes.data    : null;
+    const eps        = (epsRes.success && epsRes.data)    ? epsRes.data    : null;
+    const history    = histRes.success ? histRes.data : [];
+    const inst       = (instRes.success && instRes.data)  ? instRes.data   : null;
+    const margin     = (marginRes.success && marginRes.data) ? marginRes.data : null;
 
     // BWIBBU_d 提供 PE、PB、殖利率
     const pe            = fin?.pe            || null;
@@ -143,6 +147,8 @@ async function fetchStock(sym) {
       target,
       momentum: price.change,
       history:  history.map(h=>({ date:h.date, price:h.price })),
+      inst,
+      margin,
     };
 
   } else {
@@ -475,6 +481,64 @@ function StockPage() {
           <Card>
             <KLineChart history={stock.history} support={stock.support} target={stock.target} currSym={cs} />
           </Card>
+
+          {/* 三大法人 */}
+          {stock.inst && (
+            <Card>
+              <SectionLabel>INSTITUTIONAL · 三大法人（最新交易日）</SectionLabel>
+              <div style={{ marginBottom:12 }}>
+                <div style={{ fontSize:13, color:C.muted, marginBottom:4 }}>合計買賣超（股）</div>
+                <div style={{ fontSize:28, fontWeight:900, color:stock.inst.total>=0?C.up:C.down, fontFamily:"monospace" }}>
+                  {stock.inst.total>=0?"+":""}{stock.inst.total.toLocaleString()}
+                </div>
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8 }}>
+                {[
+                  ["外資", stock.inst.foreign],
+                  ["投信", stock.inst.investment],
+                  ["自營商", stock.inst.dealer],
+                ].map(([label, val]) => (
+                  <InnerBox key={label}>
+                    <div style={{ fontSize:13, color:C.navy, marginBottom:4 }}>{label}</div>
+                    <div style={{ fontSize:14, fontWeight:700, color:val>=0?C.up:C.down, fontFamily:"monospace" }}>
+                      {val>=0?"+":""}{val?.toLocaleString() || "—"}
+                    </div>
+                  </InnerBox>
+                ))}
+              </div>
+              <div style={{ fontSize:12, color:C.faint, marginTop:8 }}>資料日期：{stock.inst.date || "—"}</div>
+            </Card>
+          )}
+
+          {/* 融資融券 */}
+          {stock.margin && (
+            <Card>
+              <SectionLabel>MARGIN · 融資融券（最新交易日）</SectionLabel>
+              <div style={{ marginBottom:12 }}>
+                <div style={{ fontSize:13, color:C.muted, marginBottom:4 }}>資券差（融資-融券，正數偏多）</div>
+                <div style={{ fontSize:28, fontWeight:900, color:stock.margin.net>=0?C.up:C.down, fontFamily:"monospace" }}>
+                  {stock.margin.net>=0?"+":""}{stock.margin.net?.toLocaleString()}
+                </div>
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                {[
+                  ["融資買進（張）",   stock.margin.marginBuy],
+                  ["融資賣出（張）",   stock.margin.marginSell],
+                  ["融資餘額（張）",   stock.margin.marginBalance],
+                  ["融券賣出（張）",   stock.margin.shortSell],
+                  ["融券買進（張）",   stock.margin.shortBuy],
+                  ["融券餘額（張）",   stock.margin.shortBalance],
+                ].map(([label, val]) => (
+                  <InnerBox key={label}>
+                    <div style={{ fontSize:12, color:C.muted, marginBottom:2 }}>{label}</div>
+                    <div style={{ fontSize:14, fontWeight:700, color:C.navy, fontFamily:"monospace" }}>
+                      {val?.toLocaleString() || "—"}
+                    </div>
+                  </InnerBox>
+                ))}
+              </div>
+            </Card>
+          )}
 
           {/* 財務健康 */}
           <Card>
