@@ -233,56 +233,75 @@ export default async function handler(req, res) {
             throw new Error('FinMind 無資料');
           }
 
-          // 過濾出需要的欄位
+          // 過濾出需要的欄位（使用正確的英文欄位名）
           const allData = raw.data;
 
-          // 找近4季的稅後淨利（歸屬母公司）
+          // 近4季稅後淨利
           const netIncomeRows = allData
-            .filter(d => d.type === '稅後淨利' || d.type === 'profit_attributable_to_parent')
+            .filter(d => d.type === 'IncomeAfterTaxes')
             .sort((a, b) => b.date.localeCompare(a.date))
             .slice(0, 4);
 
-          // 找近4季的母公司權益
+          // 近4季母公司權益
           const equityRows = allData
-            .filter(d => d.type === '歸屬於母公司業主之權益合計' || d.type === 'equity_attributable_to_parent')
+            .filter(d => d.type === 'EquityAttributableToOwnersOfParent')
             .sort((a, b) => b.date.localeCompare(a.date))
             .slice(0, 4);
 
-          // 找流通在外股數
-          const sharesRows = allData
-            .filter(d => d.type === '普通股股數' || d.type === 'shares_outstanding')
-            .sort((a, b) => b.date.localeCompare(a.date));
+          // 直接用 EPS 欄位（近4季）
+          const epsRows = allData
+            .filter(d => d.type === 'EPS')
+            .sort((a, b) => b.date.localeCompare(a.date))
+            .slice(0, 4);
 
-          // 如果找不到這些欄位，列出所有可用的 type
-          if (netIncomeRows.length === 0) {
+          if (netIncomeRows.length === 0 && epsRows.length === 0) {
             const types = [...new Set(allData.map(d => d.type))];
-            res.status(200).json({ success: true, data: null, note: '找不到稅後淨利', availableTypes: types.slice(0, 20) });
+            res.status(200).json({ success: true, data: null, note: '找不到財報欄位', availableTypes: types });
             return;
           }
 
-          const eps4sum     = netIncomeRows.reduce((a, d) => a + (d.value || 0), 0);
+          // 近4季淨利加總
+          const eps4sum        = netIncomeRows.reduce((a, d) => a + (d.value || 0), 0);
+          // 近4季EPS加總（備用）
+          const eps4sumFallback = epsRows.reduce((a, d) => a + (d.value || 0), 0);
+
           const latestEquity   = equityRows[0]?.value || null;
           const earliestEquity = equityRows[equityRows.length - 1]?.value || null;
-          const shares         = sharesRows[0]?.value || null;
 
-          // 每股調整淨值 = 最新季權益 / 流通在外股數（千股→股）
-          const adjustedEquityPerShare = (latestEquity && shares) ? (latestEquity / (shares / 1000)) : null;
+          // 調整ROE = 近4季淨利 / 最早季母公司權益
+          const adjustedROE = (eps4sum && earliestEquity)
+            ? (eps4sum / earliestEquity) * 100
+            : null;
 
-          // 調整ROE = 近4季淨利 / 最早季權益
-          const adjustedROE = (eps4sum && earliestEquity) ? (eps4sum / earliestEquity) * 100 : null;
+          // 每股調整淨值：需要流通在外股數
+          // 用 PE/PB 反推每股淨值作為調整每股淨值
+          let bookValue = null;
+          const tradingDates = getLastTradingDates(3);
+          for (const dateStr of tradingDates) {
+            const r2 = await fetch(`https://www.twse.com.tw/rwd/zh/afterTrading/BWIBBU_d?date=${dateStr}&selectType=ALL&response=json`);
+            const raw2 = await r2.json();
+            if (raw2?.data?.length) {
+              const row2 = raw2.data.find(d => d[0] === stockNo);
+              if (row2) {
+                const currentPrice = parseFloat(row2[2].replace(/,/g,''));
+                const pb = parseFloat(row2[6]);
+                if (pb && currentPrice) { bookValue = currentPrice / pb; break; }
+              }
+            }
+          }
 
-          // 基準值 = 每股調整淨值 × 調整ROE × 10
-          const benchmark = (adjustedEquityPerShare && adjustedROE)
-            ? adjustedEquityPerShare * (adjustedROE / 100) * 10
+          // 基準值 = 每股淨值 × 調整ROE × 10
+          const benchmark = (bookValue && adjustedROE)
+            ? bookValue * (adjustedROE / 100) * 10
             : null;
 
           data = {
             eps4sum,
+            eps4sumEPS: eps4sumFallback,
             latestEquity,
             earliestEquity,
-            shares,
             adjustedROE,
-            adjustedEquityPerShare,
+            adjustedEquityPerShare: bookValue,
             benchmark,
             source: 'finmind',
             quarters: netIncomeRows.map(d => ({ date: d.date, netIncome: d.value })),
