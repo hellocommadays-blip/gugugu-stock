@@ -214,62 +214,133 @@ export default async function handler(req, res) {
         break;
       }
 
-      // ── 每股盈餘 + 每股淨值（用來算基準值）────────────────
-      // 使用 goodinfo.tw 或 statementdog 的公開資料
-      // 改用 TWSE 每日行情附帶的本益比反推 EPS
+      // ── 每股盈餘 + 每股淨值（精確財報版）────────────────
       case 'eps': {
-        // 策略：用 BWIBBU_d 的 PE × 收盤價 反推 EPS
-        // 再用 PB × 收盤價 反推每股淨值
-        // 然後算出調整ROE = EPS / 每股淨值
+        // 使用 MOPS 公開資訊觀測站 JSON API
+        // 抓近4季的每股盈餘和股東權益
+        const now = new Date();
+        now.setHours(now.getHours() + 8); // UTC+8
 
-        // 先抓今日報價
-        const priceUrl = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_${stockNo}.tw&json=1&delay=0`;
-        const priceR   = await fetch(priceUrl, {
-          headers: { 'Referer': 'https://mis.twse.com.tw/stock/fibest.html', 'User-Agent': 'Mozilla/5.0' }
-        });
-        const priceRaw = await priceR.json();
-        const item     = priceRaw?.msgArray?.[0];
-        const currentPrice = item ? (parseFloat(item.z) > 0 ? parseFloat(item.z) : parseFloat(item.y)) : null;
+        // 計算近4季的年/季
+        const quarters = [];
+        let year = now.getFullYear();
+        let quarter = Math.ceil((now.getMonth() + 1) / 3);
+        for (let i = 0; i < 5; i++) {
+          quarter--;
+          if (quarter === 0) { quarter = 4; year--; }
+          quarters.push({ year: year - 1911, quarter }); // 民國年
+        }
 
-        // 再抓 BWIBBU_d
-        let finRaw = null;
-        for (let i = 1; i <= 7; i++) {
-          const d = new Date();
-          d.setDate(d.getDate() - i);
-          if (d.getDay() === 0 || d.getDay() === 6) continue;
-          const dateStr = d.toISOString().slice(0,10).replace(/-/g,'');
+        // 抓每季財報
+        const quarterData = [];
+        for (const q of quarters.slice(0, 4)) {
+          try {
+            const url = `https://mops.twse.com.tw/mops/web/ajax_t163sb04?encodeURIComponent=1&step=1&firstin=1&off=1&co_id=${stockNo}&year=${q.year}&season=0${q.quarter}`;
+            const r = await fetch(url, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'User-Agent': 'Mozilla/5.0',
+                'Referer': 'https://mops.twse.com.tw/',
+              },
+              body: `encodeURIComponent=1&step=1&firstin=1&off=1&co_id=${stockNo}&year=${q.year}&season=0${q.quarter}`,
+            });
+            const html = await r.text();
+
+            // 從 HTML 解析每股盈餘
+            const epsMatch = html.match(/基本每股盈餘[^<]*<\/td>[^<]*<td[^>]*>([^<]+)<\/td>/);
+            const equityMatch = html.match(/歸屬於母公司業主之權益合計[^<]*<\/td>[^<]*<td[^>]*>([^<]+)<\/td>/);
+
+            if (epsMatch || equityMatch) {
+              quarterData.push({
+                year: q.year + 1911,
+                quarter: q.quarter,
+                eps: epsMatch ? parseFloat(epsMatch[1].replace(/,/g,'')) : null,
+                equity: equityMatch ? parseFloat(equityMatch[1].replace(/,/g,'')) : null,
+              });
+            }
+          } catch (_) {}
+        }
+
+        // 如果 MOPS 抓不到，fallback 到 PE/PB 反推
+        if (quarterData.length === 0) {
+          // Fallback: PE/PB 反推
+          const priceUrl = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_${stockNo}.tw&json=1&delay=0`;
+          const priceR = await fetch(priceUrl, { headers: { 'Referer': 'https://mis.twse.com.tw/stock/fibest.html', 'User-Agent': 'Mozilla/5.0' } });
+          const priceRaw = await priceR.json();
+          const item = priceRaw?.msgArray?.[0];
+          const currentPrice = item ? (parseFloat(item.z) > 0 ? parseFloat(item.z) : parseFloat(item.y)) : null;
+
+          let finRaw = null;
+          for (let i = 1; i <= 7; i++) {
+            const d = new Date(); d.setHours(d.getHours() + 8); d.setDate(d.getDate() - i);
+            if (d.getDay() === 0 || d.getDay() === 6) continue;
+            const dateStr = d.toISOString().slice(0,10).replace(/-/g,'');
+            const r = await fetch(`https://www.twse.com.tw/rwd/zh/afterTrading/BWIBBU_d?date=${dateStr}&selectType=ALL&response=json`);
+            finRaw = await r.json();
+            if (finRaw?.data?.length) break;
+            finRaw = null;
+          }
+
+          const row = finRaw?.data?.find(d => d[0] === stockNo);
+          if (!row || !currentPrice) {
+            res.status(200).json({ success: true, data: null, note: '查無財務資料' });
+            return;
+          }
+
+          const pe = parseFloat(row[5]) || null;
+          const pb = parseFloat(row[6]) || null;
+          const eps = (pe && currentPrice) ? currentPrice / pe : null;
+          const bookValue = (pb && currentPrice) ? currentPrice / pb : null;
+          const adjustedROE = (eps && bookValue) ? (eps / bookValue) * 100 : null;
+
+          data = {
+            eps, bookValue, adjustedROE,
+            adjustedEquityPerShare: bookValue,
+            benchmark: bookValue && adjustedROE ? bookValue * (adjustedROE / 100) * 10 : null,
+            source: 'fallback_pePb',
+          };
+          break;
+        }
+
+        // 計算精確基準值
+        const eps4sum = quarterData.reduce((a, q) => a + (q.eps || 0), 0);
+        const latestEquity = quarterData[0]?.equity || null;
+        const earliestEquity = quarterData[quarterData.length - 1]?.equity || null;
+
+        // 需要流通在外張數算每股淨值
+        // 先抓股票基本資料拿到流通在外張數
+        const bwibbuDates = getLastTradingDates(3);
+        let bwibbuRow = null;
+        let currentPrice2 = null;
+        for (const dateStr of bwibbuDates) {
           const r = await fetch(`https://www.twse.com.tw/rwd/zh/afterTrading/BWIBBU_d?date=${dateStr}&selectType=ALL&response=json`);
-          finRaw = await r.json();
-          if (finRaw?.data?.length) break;
-          finRaw = null;
+          const raw = await r.json();
+          if (raw?.data?.length) {
+            bwibbuRow = raw.data.find(d => d[0] === stockNo);
+            if (bwibbuRow) {
+              currentPrice2 = parseFloat(bwibbuRow[2].replace(/,/g,''));
+              break;
+            }
+          }
         }
 
-        const row = finRaw?.data?.find(d => d[0] === stockNo);
-        if (!row || !currentPrice) {
-          res.status(200).json({ success: true, data: null, note: '查無財務資料' });
-          return;
-        }
+        const pe2 = bwibbuRow ? parseFloat(bwibbuRow[5]) : null;
+        const pb2 = bwibbuRow ? parseFloat(bwibbuRow[6]) : null;
+        const bookValueFromPB = (pb2 && currentPrice2) ? currentPrice2 / pb2 : null;
 
-        // BWIBBU_d 正確欄位：
-        // [0]代號 [1]名稱 [2]收盤價 [3]殖利率 [4]股利年度 [5]本益比 [6]股價淨值比 [7]財報年季
-        const pe = parseFloat(row[5]) || null;  // 本益比（正確欄位）
-        const pb = parseFloat(row[6]) || null;  // 股價淨值比（正確欄位）
-        const dividendYieldRaw = parseFloat(row[3]) || null; // 殖利率
-
-        // 反推：EPS = 股價 / PE，每股淨值 = 股價 / PB
-        const eps       = (pe && currentPrice) ? currentPrice / pe : null;
-        const bookValue = (pb && currentPrice) ? currentPrice / pb : null;
-
-        // 調整ROE ≈ EPS / 每股淨值（近似值，非精確財報數字）
-        const adjustedROE = (eps && bookValue) ? (eps / bookValue) * 100 : null;
+        // 調整ROE = 近4季EPS / 最早季每股淨值
+        const adjustedROE2 = (eps4sum && bookValueFromPB) ? (eps4sum / bookValueFromPB) * 100 : null;
+        const benchmark2 = (bookValueFromPB && adjustedROE2) ? bookValueFromPB * (adjustedROE2 / 100) * 10 : null;
 
         data = {
-          eps,
-          bookValue,
-          adjustedROE,
-          adjustedEquityPerShare: bookValue,
-          benchmark: bookValue && adjustedROE ? bookValue * (adjustedROE / 100) * 10 : null,
-          note: '基於 PE/PB 反推，為近似值',
+          eps4sum,
+          bookValue: bookValueFromPB,
+          adjustedROE: adjustedROE2,
+          adjustedEquityPerShare: bookValueFromPB,
+          benchmark: benchmark2,
+          quarterData,
+          source: quarterData.length > 0 ? 'mops_quarterly' : 'fallback_pePb',
         };
         break;
       }
