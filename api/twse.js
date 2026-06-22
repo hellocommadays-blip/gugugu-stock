@@ -407,12 +407,12 @@ export default async function handler(req, res) {
         const url = `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockBalanceSheet&data_id=${stockNo}&start_date=2024-01-01&token=${FINMIND_TOKEN}`;
         const r   = await fetch(url);
         const raw = await r.json();
-        const types = [...new Set((raw?.data||[]).map(d => d.type))];
-        // 找股東權益相關欄位
+        // 找所有日期的母公司權益和其他權益
         const equity = (raw?.data||[]).filter(d =>
-          d.type.toLowerCase().includes('equity') || d.type.includes('Equity') || d.type.includes('equity')
-        ).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,10);
-        data = { types: types.slice(0,30), equitySamples: equity };
+          d.type === 'EquityAttributableToOwnersOfParent' || d.type === 'OtherEquityInterest'
+        ).sort((a,b)=>a.date.localeCompare(b.date));
+        const dates = [...new Set((raw?.data||[]).map(d=>d.date))].sort();
+        data = { dates, equity, total: raw?.data?.length };
         break;
       }
 
