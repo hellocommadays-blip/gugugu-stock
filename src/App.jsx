@@ -554,13 +554,36 @@ function PortfolioPage({ user }) {
   // 載入持倉
   useEffect(() => {
     if (!user) {
-      // 未登入：使用 localStorage
       const saved = localStorage.getItem("gugugu_holdings");
       if (saved) setHoldings(JSON.parse(saved));
       return;
     }
     loadHoldings();
   }, [user]);
+
+  // 載入完持倉後，抓每支股票即時價格
+  useEffect(() => {
+    if (holdings.length === 0) return;
+    async function fetchPrices() {
+      const newPrices = {};
+      await Promise.all(holdings.map(async h => {
+        try {
+          const market = detectMarket(h.symbol);
+          if (market === "TW") {
+            const r = await fetch(`/api/twse?type=price&stockNo=${h.symbol}`);
+            const data = await r.json();
+            if (data.success) newPrices[h.symbol] = data.data.price;
+          } else {
+            const r = await fetch(`/api/finnhub?symbol=${h.symbol}&market=US&type=quote`);
+            const data = await r.json();
+            if (data.success) newPrices[h.symbol] = data.data.price;
+          }
+        } catch (_) {}
+      }));
+      setPrices(newPrices);
+    }
+    fetchPrices();
+  }, [holdings]);
 
   async function loadHoldings() {
     setLoading(true);
@@ -641,11 +664,9 @@ function PortfolioPage({ user }) {
     }
   }
 
-  // 計算損益（用固定價格，實際應該即時抓）
-  const MOCK_PRICES = { "2330":2410, "2317":268.5, "2454":4390, "00878":22.5, "TSLA":400.53, "AAPL":213, "NVDA":135, "KO":71.2, "DIS":109.3 };
-
+  // 計算損益（用即時價格）
   const calced = holdings.map(h => {
-    const currentPrice = MOCK_PRICES[h.symbol] || 0;
+    const currentPrice = prices[h.symbol] || 0;
     const totalShares = h.lots.reduce((a,l)=>a+l.shares, 0);
     const totalCost   = h.lots.reduce((a,l)=>a+l.shares*l.cost, 0);
     const avgCost     = totalCost / totalShares;
