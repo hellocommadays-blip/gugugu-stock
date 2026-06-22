@@ -30,7 +30,8 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') { res.status(200).end(); return; }
 
   const { type, stockNo } = req.query;
-  if (!stockNo) { res.status(400).json({ error: 'stockNo 必填' }); return; }
+  // screener 不需要 stockNo
+  if (!stockNo && type !== 'screener') { res.status(400).json({ error: 'stockNo 必填' }); return; }
 
   try {
     let data;
