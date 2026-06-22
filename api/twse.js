@@ -1,5 +1,28 @@
 // api/twse.js — 台股 TWSE proxy
 
+// 取得台灣時間日期字串（UTC+8）
+function getTWDate(offsetDays = 0) {
+  const d = new Date();
+  d.setHours(d.getHours() + 8); // UTC → UTC+8
+  d.setDate(d.getDate() + offsetDays);
+  return d.toISOString().slice(0,10).replace(/-/g,'');
+}
+
+// 往回找最近交易日（跳過週末）
+function getLastTradingDates(count = 3) {
+  const dates = [];
+  let d = new Date();
+  d.setHours(d.getHours() + 8);
+  while (dates.length < count) {
+    const dow = d.getDay();
+    if (dow !== 0 && dow !== 6) {
+      dates.push(d.toISOString().slice(0,10).replace(/-/g,''));
+    }
+    d.setDate(d.getDate() - 1);
+  }
+  return dates;
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -139,10 +162,16 @@ export default async function handler(req, res) {
 
       // ── 三大法人 ──────────────────────────────────────────
       case 'institutional': {
-        const today = new Date().toISOString().slice(0,10).replace(/-/g,'');
-        const url   = `https://www.twse.com.tw/rwd/zh/fund/T86?date=${today}&selectType=ALLBUT0999&response=json`;
-        const r     = await fetch(url);
-        const raw   = await r.json();
+        // 往回找最近3個交易日，找到有資料的為止
+        const tradingDates = getLastTradingDates(3);
+        let raw = null;
+        for (const dateStr of tradingDates) {
+          const url = `https://www.twse.com.tw/rwd/zh/fund/T86?date=${dateStr}&selectType=ALLBUT0999&response=json`;
+          const r   = await fetch(url);
+          raw = await r.json();
+          if (raw?.data?.length) break;
+          raw = null;
+        }
         if (!raw?.data) { res.status(200).json({ success:true, data:null }); return; }
         const row = raw.data.find(d => d[0] === stockNo);
         if (!row)  { res.status(200).json({ success:true, data:null }); return; }
@@ -159,10 +188,16 @@ export default async function handler(req, res) {
 
       // ── 融資融券 ──────────────────────────────────────────
       case 'margin': {
-        const today = new Date().toISOString().slice(0,10).replace(/-/g,'');
-        const url   = `https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN?date=${today}&selectType=ALL&response=json`;
-        const r     = await fetch(url);
-        const raw   = await r.json();
+        // 往回找最近3個交易日
+        const tradingDates = getLastTradingDates(3);
+        let raw = null;
+        for (const dateStr of tradingDates) {
+          const url = `https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN?date=${dateStr}&selectType=ALL&response=json`;
+          const r   = await fetch(url);
+          raw = await r.json();
+          if (raw?.data?.length) break;
+          raw = null;
+        }
         if (!raw?.data) { res.status(200).json({ success:true, data:null }); return; }
         const row = raw.data.find(d => d[0] === stockNo);
         if (!row)  { res.status(200).json({ success:true, data:null }); return; }
