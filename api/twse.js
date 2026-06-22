@@ -265,16 +265,23 @@ export default async function handler(req, res) {
           const balanceRaw   = await balanceR.json();
           const balanceData  = balanceRaw?.data || [];
 
-          // 最早季資產負債表數據（調整ROE分母用）
+          // 找出近4季淨利中最早那季的日期，用那季的資產負債表
+          const earliestIncomeDate = netIncomeRows[netIncomeRows.length - 1]?.date;
+          const latestIncomeDate   = netIncomeRows[0]?.date;
+
           const balanceByDate = {};
           balanceData.forEach(d => {
             if (!balanceByDate[d.date]) balanceByDate[d.date] = {};
             balanceByDate[d.date][d.type] = d.value;
           });
 
-          const sortedDates   = Object.keys(balanceByDate).sort();
-          const earliestBal   = balanceByDate[sortedDates[0]] || {};
-          const latestBal     = balanceByDate[sortedDates[sortedDates.length - 1]] || {};
+          // 找「早於最早季淨利日期」的最近一筆資產負債表（即前一季）
+          const allBalDates = Object.keys(balanceByDate).sort();
+          // 調整ROE分母用：比最早季淨利更早一季的資產負債表
+          const denomDate = allBalDates.filter(d => d < earliestIncomeDate).pop()
+                         || allBalDates[0]; // 找不到就用最早的
+          const earliestBal = balanceByDate[denomDate] || {};
+          const latestBal   = balanceByDate[allBalDates[allBalDates.length - 1]] || {};
 
           // 調整ROE 分母 = 最早季母公司權益 + 最早季其他權益
           const earliestEquity      = earliestBal['EquityAttributableToOwnersOfParent'] || null;
