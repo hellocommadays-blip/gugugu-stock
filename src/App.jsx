@@ -500,39 +500,153 @@ function StockPage() {
 }
 
 // ============================================================
-// 選股頁（台股，Mock 資料）
+// 選股頁（台股，真實資料）
 // ============================================================
 function ScreenerPage() {
   const [selectedZone, setSelectedZone] = useState("全部");
-  const [results, setResults] = useState([]);
-  const [ran, setRan] = useState(false);
-  const zones = ["全部","極低估區","低估區","合理區","偏高區","高估區","泡沫區"];
-  const zoneColor = { "極低估區":C.z0,"低估區":C.z1,"合理區":C.z2,"偏高區":C.z3,"高估區":C.z4,"泡沫區":C.z5 };
+  const [results,      setResults]      = useState([]);
+  const [allResults,   setAllResults]   = useState([]);
+  const [loading,      setLoading]      = useState(false);
+  const [ran,          setRan]          = useState(false);
+  const [dataDate,     setDataDate]     = useState("");
+  const [sortBy,       setSortBy]       = useState("zone"); // zone, pe, pb, divYield
 
-  function run() {
-    setResults([]); setRan(true);
+  const zones     = ["全部","極低估區","低估區","合理區","偏高區","高估區","泡沫區"];
+  const zoneColor = { "極低估區":C.z0,"低估區":C.z1,"合理區":C.z2,"偏高區":C.z3,"高估區":C.z4,"泡沫區":C.z5 };
+  const zoneOrder = { "極低估區":0,"低估區":1,"合理區":2,"偏高區":3,"高估區":4,"泡沫區":5 };
+
+  async function run() {
+    setLoading(true); setRan(true);
+    try {
+      const r    = await fetch('/api/twse?type=screener');
+      const data = await r.json();
+      if (data.success) {
+        setAllResults(data.data || []);
+        setDataDate(data.date || "");
+        filterAndSort(data.data || [], selectedZone, sortBy);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function filterAndSort(data, zone, sort) {
+    let filtered = zone === "全部" ? data : data.filter(s => s.zone === zone);
+    filtered = [...filtered].sort((a, b) => {
+      if (sort === "zone")     return (zoneOrder[a.zone] || 0) - (zoneOrder[b.zone] || 0);
+      if (sort === "pe")       return (a.pe || 999) - (b.pe || 999);
+      if (sort === "pb")       return (a.pb || 999) - (b.pb || 999);
+      if (sort === "divYield") return (b.divYield || 0) - (a.divYield || 0);
+      return 0;
+    });
+    setResults(filtered);
+  }
+
+  function onZoneChange(z) {
+    setSelectedZone(z);
+    filterAndSort(allResults, z, sortBy);
+  }
+
+  function onSortChange(s) {
+    setSortBy(s);
+    filterAndSort(allResults, selectedZone, s);
   }
 
   return (
     <div>
       <Card style={{ marginBottom:16 }}>
-        <SectionLabel>篩選條件 · 台股</SectionLabel>
-        <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginBottom:16 }}>
-          {zones.map(z=>{
-            const active = selectedZone===z;
-            const col = zoneColor[z]||C.accent;
-            return <button key={z} onClick={()=>setSelectedZone(z)} style={{ padding:"6px 14px", borderRadius:20, border:`1.5px solid ${active?col:C.border}`, background:active?col+"18":"transparent", color:active?col:C.muted, fontSize:13, cursor:"pointer", fontWeight:active?700:400 }}>{z}</button>;
-          })}
-        </div>
-        <button onClick={run} style={{ width:"100%", padding:"12px", borderRadius:12, border:"none", background:`linear-gradient(135deg,${C.accentDark},${C.accent})`, color:"#fff", fontWeight:700, fontSize:15, cursor:"pointer" }}>執行選股</button>
-      </Card>
-      {ran && (
-        <Card>
-          <div style={{ textAlign:"center", padding:32, color:C.muted }}>
-            <div style={{ fontSize:32, marginBottom:8 }}>🕊️</div>
-            <div style={{ fontSize:15, fontWeight:600, color:C.navy, marginBottom:8 }}>選股功能開發中</div>
-            <div style={{ fontSize:13 }}>即將接入全市場真實資料，敬請期待！</div>
+        <SectionLabel>篩選條件 · 台股上市</SectionLabel>
+
+        {/* 估值區間 */}
+        <div style={{ marginBottom:12 }}>
+          <div style={{ fontSize:13, color:C.navy, marginBottom:8, fontWeight:600 }}>估值區間</div>
+          <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+            {zones.map(z=>{
+              const active = selectedZone===z;
+              const col    = zoneColor[z]||C.accent;
+              return (
+                <button key={z} onClick={()=>onZoneChange(z)}
+                  style={{ padding:"6px 14px", borderRadius:20, border:`1.5px solid ${active?col:C.border}`, background:active?col+"18":"transparent", color:active?col:C.muted, fontSize:13, cursor:"pointer", fontWeight:active?700:400 }}>
+                  {z}
+                </button>
+              );
+            })}
           </div>
+        </div>
+
+        {/* 排序 */}
+        <div style={{ marginBottom:16 }}>
+          <div style={{ fontSize:13, color:C.navy, marginBottom:8, fontWeight:600 }}>排序方式</div>
+          <div style={{ display:"flex", gap:8 }}>
+            {[["zone","估值區間"],["pe","本益比↑"],["pb","淨值比↑"],["divYield","殖利率↓"]].map(([val,label])=>(
+              <button key={val} onClick={()=>onSortChange(val)}
+                style={{ padding:"6px 14px", borderRadius:20, border:`1.5px solid ${sortBy===val?C.accent:C.border}`, background:sortBy===val?C.accent+"18":"transparent", color:sortBy===val?C.accent:C.muted, fontSize:13, cursor:"pointer", fontWeight:sortBy===val?700:400 }}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <button onClick={run} disabled={loading}
+          style={{ width:"100%", padding:"12px", borderRadius:12, border:"none", background:`linear-gradient(135deg,${C.accentDark},${C.accent})`, color:"#fff", fontWeight:700, fontSize:15, cursor:"pointer", opacity:loading?0.7:1 }}>
+          {loading ? "掃描全市場中⋯" : "執行選股"}
+        </button>
+      </Card>
+
+      {ran && (
+        <Card style={{ padding:0, overflow:"hidden" }}>
+          <div style={{ padding:"14px 20px", borderBottom:`1px solid ${C.border}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <span style={{ fontSize:14, fontWeight:700, color:C.navy }}>
+              {loading ? "載入中⋯" : `篩選結果 ${results.length} 檔`}
+            </span>
+            <div style={{ fontSize:11, color:C.faint }}>
+              {dataDate && `資料日期：${dataDate}`}
+              <span style={{ marginLeft:8, color:C.faint }}>⚠️ 基準值為近似值</span>
+            </div>
+          </div>
+
+          {loading ? (
+            <div style={{ padding:40, textAlign:"center", color:C.muted }}>
+              <div style={{ fontSize:32, marginBottom:8 }}>🕊️</div>
+              <div>掃描全市場中，請稍候⋯</div>
+            </div>
+          ) : results.length === 0 ? (
+            <div style={{ padding:32, textAlign:"center", color:C.muted }}>目前無符合條件的股票</div>
+          ) : (
+            <div>
+              {/* 表頭 */}
+              <div style={{ display:"grid", gridTemplateColumns:"80px 1fr 80px 60px 60px 80px", gap:8, padding:"8px 16px", background:C.surface2, fontSize:11, color:C.muted, fontWeight:600 }}>
+                <span>代號</span>
+                <span>名稱</span>
+                <span style={{ textAlign:"right" }}>股價</span>
+                <span style={{ textAlign:"right" }}>PE</span>
+                <span style={{ textAlign:"right" }}>殖利率</span>
+                <span style={{ textAlign:"right" }}>估值區間</span>
+              </div>
+              {results.slice(0, 100).map(s=>(
+                <div key={s.symbol} style={{ display:"grid", gridTemplateColumns:"80px 1fr 80px 60px 60px 80px", gap:8, padding:"10px 16px", borderBottom:`1px solid ${C.surface2}`, alignItems:"center" }}>
+                  <span style={{ fontSize:13, fontWeight:700, color:C.navy }}>{s.symbol}</span>
+                  <span style={{ fontSize:13, color:C.muted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.name}</span>
+                  <span style={{ fontSize:13, fontWeight:600, color:C.navy, textAlign:"right", fontFamily:"monospace" }}>
+                    {fmt(s.price)}
+                    {s.changePct != null && (
+                      <div style={{ fontSize:10, color:s.changePct>=0?C.up:C.down }}>{fmtPct(s.changePct)}</div>
+                    )}
+                  </span>
+                  <span style={{ fontSize:12, color:C.muted, textAlign:"right" }}>{s.pe ? fmt(s.pe,1) : "—"}</span>
+                  <span style={{ fontSize:12, color:C.muted, textAlign:"right" }}>{s.divYield ? `${fmt(s.divYield,1)}%` : "—"}</span>
+                  <span style={{ fontSize:11, fontWeight:700, color:zoneColor[s.zone]||C.muted, textAlign:"right" }}>{s.zone}</span>
+                </div>
+              ))}
+              {results.length > 100 && (
+                <div style={{ padding:"12px 16px", textAlign:"center", fontSize:12, color:C.muted }}>
+                  顯示前 100 筆，共 {results.length} 筆
+                </div>
+              )}
+            </div>
+          )}
         </Card>
       )}
     </div>
