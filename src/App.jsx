@@ -24,8 +24,8 @@ const C = {
   faint:     "#A8C2DC",
   accent:    "#4A9EFF",
   accentDark:"#1A6FCC",
-  up:        "#16A34A",
-  down:      "#DC2626",
+  up:        "#DC2626",   // 上漲紅（台灣習慣）
+  down:      "#16A34A",   // 下跌綠（台灣習慣）
   z0: "#0D9488",
   z1: "#16A34A",
   z2: "#CA8A04",
@@ -271,6 +271,7 @@ function StockPage() {
   async function search(s) {
     const sym = (s||query).trim().toUpperCase();
     if (!sym) return;
+    setSugg([]); // 清除自動補全
     setLoading(true); setError(""); setStock(null);
     try {
       const data = await fetchStock(sym);
