@@ -345,7 +345,21 @@ export default async function handler(req, res) {
         break;
       }
 
-            // ── Debug：看 BWIBBU_d 原始欄位 ─────────────────────
+            // ── Debug：看 FinMind 原始資料 ──────────────────────
+      case 'rawfinmind': {
+        const FINMIND_TOKEN = process.env.FINMIND_API_TOKEN;
+        const url = `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockFinancialStatements&data_id=${stockNo}&start_date=2024-01-01&token=${FINMIND_TOKEN}`;
+        const r   = await fetch(url);
+        const raw = await r.json();
+        // 只回傳 EquityAttributableToOwnersOfParent 和 IncomeAfterTaxes
+        const filtered = raw?.data?.filter(d =>
+          ['EquityAttributableToOwnersOfParent','IncomeAfterTaxes','EPS'].includes(d.type)
+        ).sort((a,b) => b.date.localeCompare(a.date)).slice(0, 20);
+        data = { filtered, total: raw?.data?.length };
+        break;
+      }
+
+      // ── Debug：看 BWIBBU_d 原始欄位 ─────────────────────
       case 'rawbwibbu': {
         let raw = null;
         for (let i = 1; i <= 7; i++) {
