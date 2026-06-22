@@ -260,7 +260,8 @@ export default async function handler(req, res) {
           // 抓資產負債表：母公司權益 + 其他權益
           const earliestDate = netIncomeRows[netIncomeRows.length - 1]?.date?.slice(0, 7);
           const latestDate   = netIncomeRows[0]?.date?.slice(0, 7);
-          const balanceUrl   = `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockBalanceSheet&data_id=${stockNo}&start_date=${earliestDate ? earliestDate + '-01' : '2024-01-01'}&token=${FINMIND_TOKEN}`;
+          // 固定從 2024-01-01 抓，確保能取到近4季前一季的資產負債表
+          const balanceUrl   = `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockBalanceSheet&data_id=${stockNo}&start_date=2024-01-01&token=${FINMIND_TOKEN}`;
           const balanceR     = await fetch(balanceUrl);
           const balanceRaw   = await balanceR.json();
           const balanceData  = balanceRaw?.data || [];
@@ -275,13 +276,18 @@ export default async function handler(req, res) {
             balanceByDate[d.date][d.type] = d.value;
           });
 
-          // 找「早於最早季淨利日期」的最近一筆資產負債表（即前一季）
+          // 調整ROE分母：用「近4季最早季淨利的前一季」資產負債表
+          // 例：近4季 = 2025Q2~2026Q1，最早 = 2025Q2（2025-06-30）
+          // 前一季 = 2025Q1（2025-03-31）
           const allBalDates = Object.keys(balanceByDate).sort();
-          // 調整ROE分母用：比最早季淨利更早一季的資產負債表
-          const denomDate = allBalDates.filter(d => d < earliestIncomeDate).pop()
-                         || allBalDates[0]; // 找不到就用最早的
+          const denomDate   = allBalDates.filter(d => d < earliestIncomeDate).pop()
+                           || allBalDates[0];
           const earliestBal = balanceByDate[denomDate] || {};
           const latestBal   = balanceByDate[allBalDates[allBalDates.length - 1]] || {};
+
+          console.log('earliestIncomeDate:', earliestIncomeDate);
+          console.log('denomDate:', denomDate);
+          console.log('allBalDates:', allBalDates);
 
           // 調整ROE 分母 = 最早季母公司權益 + 最早季其他權益
           const earliestEquity      = earliestBal['EquityAttributableToOwnersOfParent'] || null;
