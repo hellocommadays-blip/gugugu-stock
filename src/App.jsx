@@ -224,6 +224,7 @@ async function fetchStock(sym) {
       adjustedEquityPerShare: fin?.adjustedEquityPerShare||null,
       support, target, momentum: q.change, history,
       inst: null, margin: null,
+      industry: q.industry || null,
     };
   }
 }
@@ -699,9 +700,10 @@ function ScreenerPage({ onSelectStock }) {
           ) : (
             <div>
               {/* 表頭 */}
-              <div style={{ display:"grid", gridTemplateColumns:"80px 1fr 80px 60px 60px 80px", gap:8, padding:"8px 16px", background:C.surface2, fontSize:11, color:C.muted, fontWeight:600 }}>
+              <div style={{ display:"grid", gridTemplateColumns:"70px 1fr 100px 90px 60px 60px 80px", gap:8, padding:"8px 16px", background:C.surface2, fontSize:11, color:C.muted, fontWeight:600 }}>
                 <span>代號</span>
                 <span>名稱</span>
+                <span>產業別</span>
                 <span style={{ textAlign:"right" }}>股價</span>
                 <span style={{ textAlign:"right" }}>PE</span>
                 <span style={{ textAlign:"right" }}>殖利率</span>
@@ -710,11 +712,12 @@ function ScreenerPage({ onSelectStock }) {
               {results.slice(0, 100).map(s=>(
                 <div key={s.symbol}
                   onClick={()=>onSelectStock&&onSelectStock(s.symbol)}
-                  style={{ display:"grid", gridTemplateColumns:"80px 1fr 80px 60px 60px 80px", gap:8, padding:"10px 16px", borderBottom:`1px solid ${C.surface2}`, alignItems:"center", cursor:"pointer" }}
+                  style={{ display:"grid", gridTemplateColumns:"70px 1fr 100px 90px 60px 60px 80px", gap:8, padding:"10px 16px", borderBottom:`1px solid ${C.surface2}`, alignItems:"center", cursor:"pointer" }}
                   onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
                   onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                   <span style={{ fontSize:13, fontWeight:700, color:C.navy }}>{s.symbol}</span>
-                  <span style={{ fontSize:13, color:C.muted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.name}</span>
+                  <span style={{ fontSize:13, color:C.navy, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.name}</span>
+                  <span style={{ fontSize:11, color:C.faint, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.industry||"—"}</span>
                   <span style={{ fontSize:13, fontWeight:600, color:C.navy, textAlign:"right", fontFamily:"monospace" }}>
                     {fmt(s.price)}
                     {s.changePct != null && (
