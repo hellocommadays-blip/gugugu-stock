@@ -19,51 +19,48 @@ export default async function handler(req, res) {
   if (!market) { res.status(400).json({ error: 'market 必填（US 或 JP）' }); return; }
 
   // 日股加 .T 後綴
-  const fhSymbol = market === 'JP' ? `${symbol}.T` : symbol.toUpperCase();
+  const fhSymbol = symbol.toUpperCase(); // ADR 代號不需要 .T
 
   try {
     switch (type) {
 
       // ── 即時報價 ─────────────────────────────────────────
       case 'quote': {
-        // 日股：Twelve Data（JPX 交易所）
+        // 日股：用 ADR 代號透過 Finnhub 查詢（Twelve Data/Finnhub 免費版不支援東証）
+        // 使用者輸入 ADR 代號（TM、SONY、HMC 等），market=JP 代表是日股ADR
         if (market === 'JP') {
-          const TD_KEY = process.env.TWELVEDATA_API_KEY;
-          if (!TD_KEY) {
-            res.status(500).json({ error: 'TWELVEDATA_API_KEY 未設定' });
+          const [quoteRes, profileRes] = await Promise.all([
+            fetch(`${BASE}/quote?symbol=${symbol}&token=${FINNHUB_KEY}`),
+            fetch(`${BASE}/stock/profile2?symbol=${symbol}&token=${FINNHUB_KEY}`),
+          ]);
+          const quote   = await quoteRes.json();
+          const profile = await profileRes.json();
+
+          if (!quote?.c || quote.c === 0) {
+            res.status(404).json({ error: `找不到日股ADR「${symbol}」，請使用ADR代號（TM=Toyota、SONY=Sony、HMC=Honda）` });
             return;
           }
 
-          const url = `https://api.twelvedata.com/quote?symbol=${symbol}&mic_code=XJPX&apikey=${TD_KEY}`;
-          const r   = await fetch(url);
-          const q   = await r.json();
-
-          if (q?.status === 'error' || !q?.close) {
-            res.status(404).json({ error: `找不到日股 ${symbol}，請確認代號（範例：7203）` });
-            return;
-          }
-
-          const price     = parseFloat(q.close);
-          const prevClose = parseFloat(q.previous_close);
-          const change    = parseFloat(q.change);
-          const changePct = parseFloat(q.percent_change);
+          const price     = quote.c;
+          const prevClose = quote.pc;
 
           res.status(200).json({
             success: true,
             data: {
               symbol,
-              name:      q.name || symbol,
+              name:      profile?.name || symbol,
               price,
               prevClose,
-              open:      parseFloat(q.open)  || null,
-              high:      parseFloat(q.high)  || null,
-              low:       parseFloat(q.low)   || null,
-              change:    Math.round(change * 100) / 100,
-              changePct: Math.round(changePct * 100) / 100,
-              currency:  'JPY',
+              open:      quote.o || null,
+              high:      quote.h || null,
+              low:       quote.l || null,
+              change:    Math.round((price - prevClose) * 100) / 100,
+              changePct: Math.round(((price - prevClose) / prevClose) * 10000) / 100,
+              currency:  'USD',  // ADR 以美元計價
               market:    'JP',
-              industry:  '',
-              logo:      '',
+              industry:  profile?.finnhubIndustry || '',
+              logo:      profile?.logo || '',
+              isADR:     true,
             }
           });
           return;
@@ -142,25 +139,26 @@ export default async function handler(req, res) {
         const AV_KEY = process.env.ALPHAVANTAGE_API_KEY;
         const TD_KEY = process.env.TWELVEDATA_API_KEY;
 
-        // 日股：Twelve Data 歷史
-        if (market === 'JP' && TD_KEY) {
-          const url = `https://api.twelvedata.com/time_series?symbol=${symbol}&mic_code=XJPX&interval=1day&outputsize=60&apikey=${TD_KEY}`;
-          const r   = await fetch(url);
-          const raw = await r.json();
+        // 日股 ADR：用 Finnhub candle 抓歷史
+        if (market === 'JP') {
+          const to   = Math.floor(Date.now() / 1000);
+          const from = to - 90 * 24 * 60 * 60;
+          const r    = await fetch(`${BASE}/stock/candle?symbol=${symbol}&resolution=D&from=${from}&to=${to}&token=${FINNHUB_KEY}`);
+          const raw  = await r.json();
 
-          if (raw?.status === 'error' || !raw?.values?.length) {
+          if (raw?.s !== 'ok' || !raw?.t?.length) {
             res.status(200).json({ success: true, data: [], note: '無歷史資料' });
             return;
           }
 
-          const data = [...raw.values].reverse().map(v => {
-            const d = new Date(v.datetime);
+          const data = raw.t.map((ts, i) => {
+            const d = new Date(ts * 1000);
             return {
               date:  `${d.getMonth()+1}/${d.getDate()}`,
-              price: parseFloat(v.close) || null,
-              open:  parseFloat(v.open)  || null,
-              high:  parseFloat(v.high)  || null,
-              low:   parseFloat(v.low)   || null,
+              price: raw.c?.[i] || null,
+              open:  raw.o?.[i] || null,
+              high:  raw.h?.[i] || null,
+              low:   raw.l?.[i] || null,
             };
           }).filter(d => d.price);
 
@@ -204,38 +202,7 @@ export default async function handler(req, res) {
         return;
       }
 
-      // ── 日股 debug ──────────────────────────────────────
-      case 'jptest': {
-        const TD_KEY = process.env.TWELVEDATA_API_KEY;
-        const results = {};
 
-        // 先用 symbol_search 找到完整代號資訊
-        const searchR = await fetch(`https://api.twelvedata.com/symbol_search?symbol=7203&apikey=${TD_KEY}`);
-        const searchD = await searchR.json();
-        const match   = searchD?.data?.[0];
-
-        const tests = [
-          { label:'search_full',    url:`https://api.twelvedata.com/symbol_search?symbol=7203&apikey=${TD_KEY}` },
-          { label:'with_mic',       url:`https://api.twelvedata.com/quote?symbol=${match?.symbol || '7203'}&mic_code=${match?.mic_code || 'XJPX'}&apikey=${TD_KEY}` },
-          { label:'7203_dot_T',     url:`https://api.twelvedata.com/quote?symbol=7203.T&apikey=${TD_KEY}` },
-          { label:'TM_us',          url:`https://api.twelvedata.com/quote?symbol=TM&apikey=${TD_KEY}` },
-        ];
-
-        for (const t of tests) {
-          try {
-            const r = await fetch(t.url);
-            const d = await r.json();
-            results[t.label] = d?.close ? 'OK: ' + d.close :
-                               d?.status === 'error' ? 'ERR: ' + d.message :
-                               'RAW: ' + JSON.stringify(d).slice(0,150);
-          } catch(e) {
-            results[t.label] = 'FETCH_ERR: ' + e.message;
-          }
-        }
-
-        res.status(200).json({ success: true, data: results });
-        return;
-      }
 
       default:
         res.status(400).json({ error: `未知 type: ${type}` });
