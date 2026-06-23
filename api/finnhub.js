@@ -26,6 +26,47 @@ export default async function handler(req, res) {
 
       // ── 即時報價 ─────────────────────────────────────────
       case 'quote': {
+        // 日股：改用 Alpha Vantage（Finnhub 免費版不支援日股）
+        if (market === 'JP') {
+          const AV_KEY  = process.env.ALPHAVANTAGE_API_KEY;
+          const avSym   = `${symbol}.T`;
+          const url     = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${avSym}&apikey=${AV_KEY}`;
+          const r       = await fetch(url);
+          const raw     = await r.json();
+          const q       = raw?.['Global Quote'];
+
+          if (!q || !q['05. price']) {
+            res.status(404).json({ error: `找不到日股 ${symbol}，請確認代號（格式：7203）` });
+            return;
+          }
+
+          const price     = parseFloat(q['05. price']);
+          const prevClose = parseFloat(q['08. previous close']);
+          const change    = parseFloat(q['09. change']);
+          const changePct = parseFloat(q['10. change percent']?.replace('%',''));
+
+          res.status(200).json({
+            success: true,
+            data: {
+              symbol,
+              name:      symbol, // Alpha Vantage 不提供日文名稱
+              price,
+              prevClose,
+              open:      parseFloat(q['02. open'])  || null,
+              high:      parseFloat(q['03. high'])  || null,
+              low:       parseFloat(q['04. low'])   || null,
+              change:    Math.round(change * 100) / 100,
+              changePct: Math.round(changePct * 100) / 100,
+              currency:  'JPY',
+              market:    'JP',
+              industry:  '',
+              logo:      '',
+            }
+          });
+          return;
+        }
+
+        // 美股：Finnhub
         const [quoteRes, profileRes] = await Promise.all([
           fetch(`${BASE}/quote?symbol=${fhSymbol}&token=${FINNHUB_KEY}`),
           fetch(`${BASE}/stock/profile2?symbol=${fhSymbol}&token=${FINNHUB_KEY}`),
@@ -38,8 +79,8 @@ export default async function handler(req, res) {
           return;
         }
 
-        const price     = quote.c;  // 現價
-        const prevClose = quote.pc; // 昨收
+        const price     = quote.c;
+        const prevClose = quote.pc;
 
         res.status(200).json({
           success: true,
@@ -53,7 +94,7 @@ export default async function handler(req, res) {
             low:       quote.l  || null,
             change:    Math.round((price - prevClose) * 100) / 100,
             changePct: Math.round(((price - prevClose) / prevClose) * 10000) / 100,
-            currency:  market === 'JP' ? 'JPY' : 'USD',
+            currency:  'USD',
             market,
             industry:  profile?.finnhubIndustry || '',
             logo:      profile?.logo || '',
