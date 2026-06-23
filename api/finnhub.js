@@ -26,35 +26,39 @@ export default async function handler(req, res) {
 
       // ── 即時報價 ─────────────────────────────────────────
       case 'quote': {
-        // 日股：改用 Alpha Vantage（Finnhub 免費版不支援日股）
+        // 日股：Twelve Data（免費版每天800次，支援東証）
         if (market === 'JP') {
-          const AV_KEY  = process.env.ALPHAVANTAGE_API_KEY;
-          const avSym   = `${symbol}.T`;
-          const url     = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${avSym}&apikey=${AV_KEY}`;
-          const r       = await fetch(url);
-          const raw     = await r.json();
-          const q       = raw?.['Global Quote'];
-
-          if (!q || !q['05. price']) {
-            res.status(404).json({ error: `找不到日股 ${symbol}，請確認代號（格式：7203）` });
+          const TD_KEY = process.env.TWELVEDATA_API_KEY;
+          if (!TD_KEY) {
+            res.status(500).json({ error: 'TWELVEDATA_API_KEY 未設定' });
             return;
           }
 
-          const price     = parseFloat(q['05. price']);
-          const prevClose = parseFloat(q['08. previous close']);
-          const change    = parseFloat(q['09. change']);
-          const changePct = parseFloat(q['10. change percent']?.replace('%',''));
+          const tdSym = `${symbol}`;
+          const url   = `https://api.twelvedata.com/quote?symbol=${tdSym}&exchange=TSE&apikey=${TD_KEY}`;
+          const r     = await fetch(url);
+          const q     = await r.json();
+
+          if (q?.status === 'error' || !q?.close) {
+            res.status(404).json({ error: `找不到日股 ${symbol}，請確認代號（範例：7203）` });
+            return;
+          }
+
+          const price     = parseFloat(q.close);
+          const prevClose = parseFloat(q.previous_close);
+          const change    = parseFloat(q.change);
+          const changePct = parseFloat(q.percent_change);
 
           res.status(200).json({
             success: true,
             data: {
               symbol,
-              name:      symbol, // Alpha Vantage 不提供日文名稱
+              name:      q.name || symbol,
               price,
               prevClose,
-              open:      parseFloat(q['02. open'])  || null,
-              high:      parseFloat(q['03. high'])  || null,
-              low:       parseFloat(q['04. low'])   || null,
+              open:      parseFloat(q.open)  || null,
+              high:      parseFloat(q.high)  || null,
+              low:       parseFloat(q.low)   || null,
               change:    Math.round(change * 100) / 100,
               changePct: Math.round(changePct * 100) / 100,
               currency:  'JPY',
@@ -137,13 +141,41 @@ export default async function handler(req, res) {
       // ── 歷史走勢（近60日）— Alpha Vantage ──────────────
       case 'history': {
         const AV_KEY = process.env.ALPHAVANTAGE_API_KEY;
+        const TD_KEY = process.env.TWELVEDATA_API_KEY;
+
+        // 日股：Twelve Data 歷史
+        if (market === 'JP' && TD_KEY) {
+          const url = `https://api.twelvedata.com/time_series?symbol=${symbol}&exchange=TSE&interval=1day&outputsize=60&apikey=${TD_KEY}`;
+          const r   = await fetch(url);
+          const raw = await r.json();
+
+          if (raw?.status === 'error' || !raw?.values?.length) {
+            res.status(200).json({ success: true, data: [], note: '無歷史資料' });
+            return;
+          }
+
+          const data = [...raw.values].reverse().map(v => {
+            const d = new Date(v.datetime);
+            return {
+              date:  `${d.getMonth()+1}/${d.getDate()}`,
+              price: parseFloat(v.close) || null,
+              open:  parseFloat(v.open)  || null,
+              high:  parseFloat(v.high)  || null,
+              low:   parseFloat(v.low)   || null,
+            };
+          }).filter(d => d.price);
+
+          res.status(200).json({ success: true, data });
+          return;
+        }
+
+        // 美股：Alpha Vantage 歷史
         if (!AV_KEY) {
           res.status(500).json({ error: 'ALPHAVANTAGE_API_KEY 未設定' });
           return;
         }
 
-        // Alpha Vantage TIME_SERIES_DAILY
-        const avSymbol = market === 'JP' ? `${symbol}.TYO` : symbol.toUpperCase();
+        const avSymbol = symbol.toUpperCase();
         const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${avSymbol}&outputsize=compact&apikey=${AV_KEY}`;
         const r   = await fetch(url);
         const raw = await r.json();
@@ -154,7 +186,6 @@ export default async function handler(req, res) {
           return;
         }
 
-        // 取最近60筆，轉成我們的格式
         const data = Object.entries(timeSeries)
           .slice(0, 60)
           .reverse()
