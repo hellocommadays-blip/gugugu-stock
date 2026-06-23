@@ -210,11 +210,11 @@ export default async function handler(req, res) {
         const results = {};
 
         const tests = [
-          { label:'TSE',     url:`https://api.twelvedata.com/quote?symbol=7203&exchange=TSE&apikey=${TD_KEY}` },
-          { label:'TYO',     url:`https://api.twelvedata.com/quote?symbol=7203&exchange=TYO&apikey=${TD_KEY}` },
-          { label:'dot_T',   url:`https://api.twelvedata.com/quote?symbol=7203.T&apikey=${TD_KEY}` },
-          { label:'japan',   url:`https://api.twelvedata.com/quote?symbol=7203&country=Japan&apikey=${TD_KEY}` },
-          { label:'stocks',  url:`https://api.twelvedata.com/stocks?country=Japan&symbol=7203&apikey=${TD_KEY}` },
+          { label:'JPX',         url:`https://api.twelvedata.com/quote?symbol=7203&exchange=JPX&apikey=${TD_KEY}` },
+          { label:'XJPX',        url:`https://api.twelvedata.com/quote?symbol=7203&mic_code=XJPX&apikey=${TD_KEY}` },
+          { label:'country_jp',  url:`https://api.twelvedata.com/quote?symbol=7203&country=JP&apikey=${TD_KEY}` },
+          { label:'price_JPX',   url:`https://api.twelvedata.com/price?symbol=7203&exchange=JPX&apikey=${TD_KEY}` },
+          { label:'price_XJPX',  url:`https://api.twelvedata.com/price?symbol=7203&mic_code=XJPX&apikey=${TD_KEY}` },
         ];
 
         for (const t of tests) {
