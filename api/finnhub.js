@@ -207,29 +207,27 @@ export default async function handler(req, res) {
 
       // ── 日股 debug ──────────────────────────────────────
       case 'jptest': {
-        const AV_KEY = process.env.ALPHAVANTAGE_API_KEY;
+        const TD_KEY = process.env.TWELVEDATA_API_KEY;
         const results = {};
 
-        // 測試各種格式
-        const formats = ['7203.T', '7203.TYO', '7203.TSE'];
-        for (const fmt of formats) {
-          try {
-            const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${fmt}&apikey=${AV_KEY}`;
-            const r = await fetch(url);
-            const d = await r.json();
-            results[fmt] = d?.['Global Quote']?.['05. price'] ? 'OK: ' + d['Global Quote']['05. price'] : 'EMPTY: ' + JSON.stringify(d).slice(0,100);
-          } catch(e) {
-            results[fmt] = 'ERROR: ' + e.message;
-          }
-        }
+        const tests = [
+          { label:'TSE',     url:`https://api.twelvedata.com/quote?symbol=7203&exchange=TSE&apikey=${TD_KEY}` },
+          { label:'TYO',     url:`https://api.twelvedata.com/quote?symbol=7203&exchange=TYO&apikey=${TD_KEY}` },
+          { label:'dot_T',   url:`https://api.twelvedata.com/quote?symbol=7203.T&apikey=${TD_KEY}` },
+          { label:'japan',   url:`https://api.twelvedata.com/quote?symbol=7203&country=Japan&apikey=${TD_KEY}` },
+          { label:'stocks',  url:`https://api.twelvedata.com/stocks?country=Japan&symbol=7203&apikey=${TD_KEY}` },
+        ];
 
-        // 也測試 Finnhub 日股
-        try {
-          const r = await fetch(`${BASE}/quote?symbol=7203.T&token=${FINNHUB_KEY}`);
-          const d = await r.json();
-          results['finnhub_7203.T'] = d?.c ? 'OK: ' + d.c : 'EMPTY: ' + JSON.stringify(d).slice(0,100);
-        } catch(e) {
-          results['finnhub_7203.T'] = 'ERROR: ' + e.message;
+        for (const t of tests) {
+          try {
+            const r = await fetch(t.url);
+            const d = await r.json();
+            results[t.label] = d?.close ? 'OK: ' + d.close :
+                               d?.status === 'error' ? 'ERR: ' + d.message :
+                               'RAW: ' + JSON.stringify(d).slice(0,150);
+          } catch(e) {
+            results[t.label] = 'FETCH_ERR: ' + e.message;
+          }
         }
 
         res.status(200).json({ success: true, data: results });
