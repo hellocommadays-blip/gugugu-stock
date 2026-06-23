@@ -483,7 +483,20 @@ export default async function handler(req, res) {
 
       // ── 全市場選股（BWIBBU_d 近似基準值）────────────────
       case 'screener': {
-        // 抓最近交易日的全市場本益比、殖利率、股價淨值比
+        const INDUSTRY_MAP = {
+          '01':'水泥工業','02':'食品工業','03':'塑膠工業','04':'紡織纖維',
+          '05':'電機機械','06':'電器電纜','07':'化學生技醫療','08':'玻璃陶瓷',
+          '09':'造紙工業','10':'鋼鐵工業','11':'橡膠工業','12':'汽車工業',
+          '13':'電子工業','14':'建材營造','15':'航運業','16':'觀光餐旅',
+          '17':'金融保險','18':'貿易百貨','19':'綜合','20':'其他',
+          '21':'化學工業','22':'生技醫療業','23':'油電燃氣業','24':'半導體業',
+          '25':'電腦及週邊設備業','26':'光電業','27':'通信網路業','28':'電子零組件業',
+          '29':'電子通路業','30':'資訊服務業','31':'其他電子業','32':'文化創意業',
+          '33':'農業科技業','34':'電子商務','35':'綠能環保','36':'數位雲端',
+          '37':'運動休閒','38':'居家生活','80':'管理股票','90':'存託憑證',
+        };
+
+        // 同時抓：BWIBBU_d + 公司基本資料（含產業別）
         const tradingDates = getLastTradingDates(3);
         let raw = null;
         for (const dateStr of tradingDates) {
@@ -499,46 +512,38 @@ export default async function handler(req, res) {
           return;
         }
 
-        // 同時抓當日收盤行情（含漲跌）
-        const today = getTWDate(0);
-        const priceUrl = `https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=${today}&type=ALLBUT0999&response=json`;
-        const priceR   = await fetch(priceUrl);
-        const priceRaw = await priceR.json();
-
-        // 建立股價對照表
-        const priceMap = {};
-        if (priceRaw?.data) {
-          priceRaw.data.forEach(row => {
-            if (row[0] && row[2]) {
-              priceMap[row[0]] = {
-                price:     parseFloat(row[8]?.replace(/,/g,''))  || null,
-                change:    parseFloat(row[10]?.replace(/[▲▼+\-,]/g,'')) || null,
-                changePct: parseFloat(row[11]?.replace(/[%,]/g,'')) || null,
-              };
-            }
+        // 抓公司基本資料（含產業代碼）
+        const companyRes = await fetch('https://openapi.twse.com.tw/v1/opendata/t187ap03_L');
+        const companyRaw = await companyRes.json().catch(()=>[]);
+        const industryMap = {};
+        if (Array.isArray(companyRaw)) {
+          companyRaw.forEach(c => {
+            const code = c['公司代號'];
+            const ind  = c['產業別'];
+            if (code) industryMap[code] = INDUSTRY_MAP[ind] || ind || '';
           });
         }
 
         // 計算每支股票的近似基準值
         const results = raw.data
-          .filter(row => row[0] && row[5] && row[6]) // 有代號、PE、PB
+          .filter(row => row[0] && row[5] && row[6])
           .map(row => {
-            const symbol  = row[0];
-            const name    = row[1];
-            const price   = parseFloat(row[2]?.replace(/,/g,'')) || 0;
+            const symbol   = row[0];
+            const name     = row[1];
+            const price    = parseFloat(row[2]?.replace(/,/g,'')) || 0;
             const divYield = parseFloat(row[3]) || null;
-            const pe      = parseFloat(row[5]) || null;
-            const pb      = parseFloat(row[6]) || null;
+            const pe       = parseFloat(row[5]) || null;
+            const pb       = parseFloat(row[6]) || null;
+            const industry = industryMap[symbol] || '';
 
             if (!pe || !pb || price === 0) return null;
 
-            // 近似計算
-            const eps       = price / pe;           // 近似EPS
-            const bookValue = price / pb;           // 近似每股淨值
-            const approxROE = (eps / bookValue) * 100; // 近似ROE
-            const benchmark = bookValue * (approxROE / 100) * 10; // 近似基準值
+            const eps       = price / pe;
+            const bookValue = price / pb;
+            const approxROE = (eps / bookValue) * 100;
+            const benchmark = bookValue * (approxROE / 100) * 10;
+            const ratio     = price / benchmark;
 
-            const ratio = price / benchmark;
             let zone = '';
             if      (ratio < 0.85) zone = '極低估區';
             else if (ratio < 1.00) zone = '低估區';
@@ -547,17 +552,10 @@ export default async function handler(req, res) {
             else if (ratio < 2.00) zone = '高估區';
             else                   zone = '泡沫區';
 
-            const priceInfo = priceMap[symbol] || {};
-
             return {
-              symbol,
-              name,
-              price,
-              change:    priceInfo.change    || null,
-              changePct: priceInfo.changePct || null,
-              pe,
-              pb,
-              divYield,
+              symbol, name, industry, price,
+              change: null, changePct: null,
+              pe, pb, divYield,
               benchmark: Math.round(benchmark * 100) / 100,
               ratio:     Math.round(ratio * 100) / 100,
               zone,
