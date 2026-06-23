@@ -269,7 +269,11 @@ function StockPage({ initialQuery='', onQueryUsed, onAddWatchlist }) {
     ).slice(0, 8));
   }
 
-  function select(sym) { setQuery(sym); setSugg([]); search(sym); }
+  function select(item) {
+    // 日股自動加 .T 後綴
+    const sym = item.market === "JP" ? `${item.sym}.T` : item.sym;
+    setQuery(sym); setSugg([]); search(sym);
+  }
 
   async function search(s) {
     const sym = (s||query).trim().toUpperCase();
@@ -295,14 +299,14 @@ function StockPage({ initialQuery='', onQueryUsed, onAddWatchlist }) {
       <div style={{ position:"relative", marginBottom:24 }}>
         <div style={{ display:"flex", gap:8 }}>
           <input value={query} onChange={e=>onInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()}
-            placeholder="輸入代號或名稱（2330、台積電、TSLA）"
+            placeholder="輸入代號或名稱（2330、台積電、TSLA、7203.T）"
             style={{ flex:1, padding:"12px 16px", borderRadius:12, border:`1.5px solid ${C.border}`, background:C.surface, color:C.navy, fontSize:15, outline:"none" }} />
           <button onClick={()=>search()} style={{ padding:"12px 20px", borderRadius:12, border:"none", background:`linear-gradient(135deg,${C.accentDark},${C.accent})`, color:"#fff", fontWeight:700, fontSize:15, cursor:"pointer" }}>查詢</button>
         </div>
         {sugg.length>0 && (
           <div style={{ position:"absolute", top:"100%", left:0, right:60, background:C.surface, border:`1px solid ${C.border}`, borderRadius:10, marginTop:4, zIndex:100, overflow:"hidden", boxShadow:`0 8px 24px ${C.navy}18` }}>
             {sugg.map(s=>(
-              <div key={s.sym} onClick={()=>select(s.sym)}
+              <div key={s.sym} onClick={()=>select(s)}
                 style={{ padding:"10px 16px", cursor:"pointer", display:"flex", justifyContent:"space-between", alignItems:"center", borderBottom:`1px solid ${C.border}` }}
                 onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
                 onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
