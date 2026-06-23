@@ -252,12 +252,20 @@ function KLineChart({ history, support, target, currSym }) {
 // ============================================================
 // 股票查詢頁
 // ============================================================
-function StockPage() {
-  const [query, setQuery]     = useState("");
+function StockPage({ initialQuery='', onQueryUsed }) {
+  const [query, setQuery]     = useState(initialQuery);
   const [sugg,  setSugg]      = useState([]);
   const [stock, setStock]     = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState("");
+
+  // 跨頁籤查詢觸發
+  useEffect(() => {
+    if (initialQuery) {
+      search(initialQuery);
+      onQueryUsed && onQueryUsed();
+    }
+  }, [initialQuery]);
 
   function onInput(val) {
     setQuery(val);
@@ -502,7 +510,7 @@ function StockPage() {
 // ============================================================
 // 選股頁（台股，真實資料）
 // ============================================================
-function ScreenerPage() {
+function ScreenerPage({ onSelectStock }) {
   const [selectedZone, setSelectedZone] = useState("全部");
   const [results,      setResults]      = useState([]);
   const [allResults,   setAllResults]   = useState([]);
@@ -626,7 +634,11 @@ function ScreenerPage() {
                 <span style={{ textAlign:"right" }}>估值區間</span>
               </div>
               {results.slice(0, 100).map(s=>(
-                <div key={s.symbol} style={{ display:"grid", gridTemplateColumns:"80px 1fr 80px 60px 60px 80px", gap:8, padding:"10px 16px", borderBottom:`1px solid ${C.surface2}`, alignItems:"center" }}>
+                <div key={s.symbol}
+                  onClick={()=>onSelectStock&&onSelectStock(s.symbol)}
+                  style={{ display:"grid", gridTemplateColumns:"80px 1fr 80px 60px 60px 80px", gap:8, padding:"10px 16px", borderBottom:`1px solid ${C.surface2}`, alignItems:"center", cursor:"pointer" }}
+                  onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
+                  onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                   <span style={{ fontSize:13, fontWeight:700, color:C.navy }}>{s.symbol}</span>
                   <span style={{ fontSize:13, color:C.muted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.name}</span>
                   <span style={{ fontSize:13, fontWeight:600, color:C.navy, textAlign:"right", fontFamily:"monospace" }}>
@@ -649,6 +661,171 @@ function ScreenerPage() {
           )}
         </Card>
       )}
+    </div>
+  );
+}
+
+// ============================================================
+// 自選清單頁
+// ============================================================
+function WatchlistPage({ user, onSelectStock }) {
+  const [list,    setList]    = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [addSym,  setAddSym]  = useState("");
+  const [prices,  setPrices]  = useState({});
+
+  useEffect(() => {
+    if (!user) {
+      const saved = localStorage.getItem("gugugu_watchlist");
+      if (saved) setList(JSON.parse(saved));
+      return;
+    }
+    loadList();
+  }, [user]);
+
+  useEffect(() => {
+    if (list.length === 0) return;
+    async function fetchPrices() {
+      const newPrices = {};
+      await Promise.all(list.map(async item => {
+        try {
+          const market = detectMarket(item.symbol);
+          if (market === "TW") {
+            const r = await fetch(`/api/twse?type=price&stockNo=${item.symbol}`);
+            const d = await r.json();
+            if (d.success) {
+              newPrices[item.symbol] = { price: d.data.price, change: d.data.change, changePct: d.data.changePct, name: d.data.name };
+            }
+          } else {
+            const r = await fetch(`/api/finnhub?symbol=${item.symbol}&market=US&type=quote`);
+            const d = await r.json();
+            if (d.success) {
+              newPrices[item.symbol] = { price: d.data.price, change: d.data.change, changePct: d.data.changePct, name: d.data.name };
+            }
+          }
+        } catch (_) {}
+      }));
+      setPrices(newPrices);
+    }
+    fetchPrices();
+  }, [list.length]);
+
+  async function loadList() {
+    setLoading(true);
+    const { data } = await supabase.from("watchlist").select("*").order("created_at", { ascending: true });
+    if (data) setList(data.map(r => ({ symbol: r.symbol, market: r.market, name: r.name })));
+    setLoading(false);
+  }
+
+  async function addToList() {
+    if (!addSym) return;
+    const sym = addSym.trim().toUpperCase();
+    if (list.find(i => i.symbol === sym)) { setAddSym(""); return; }
+    const market = detectMarket(sym);
+
+    // 抓名稱
+    let name = sym;
+    try {
+      if (market === "TW") {
+        const r = await fetch(`/api/twse?type=price&stockNo=${sym}`);
+        const d = await r.json();
+        if (d.success) name = d.data.name || sym;
+      } else {
+        const r = await fetch(`/api/finnhub?symbol=${sym}&market=US&type=quote`);
+        const d = await r.json();
+        if (d.success) name = d.data.name || sym;
+      }
+    } catch (_) {}
+
+    const newItem = { symbol: sym, market, name };
+    if (user) {
+      await supabase.from("watchlist").insert({ user_id: user.id, symbol: sym, market, name });
+      loadList();
+    } else {
+      const newList = [...list, newItem];
+      setList(newList);
+      localStorage.setItem("gugugu_watchlist", JSON.stringify(newList));
+    }
+    setAddSym("");
+  }
+
+  async function removeFromList(sym) {
+    if (user) {
+      await supabase.from("watchlist").delete().eq("user_id", user.id).eq("symbol", sym);
+      loadList();
+    } else {
+      const newList = list.filter(i => i.symbol !== sym);
+      setList(newList);
+      localStorage.setItem("gugugu_watchlist", JSON.stringify(newList));
+    }
+  }
+
+  const inputStyle = { flex:1, padding:"10px 12px", borderRadius:10, border:`1.5px solid ${C.border}`, background:C.surface, color:C.navy, fontSize:14, outline:"none" };
+
+  return (
+    <div>
+      {!user && (
+        <div style={{ background:"#FFFBEB", border:"1px solid #FCD34D", borderRadius:12, padding:"12px 16px", color:"#92400E", fontSize:13, marginBottom:16 }}>
+          📌 未登入狀態，資料儲存在此裝置。登入後可跨裝置同步。
+        </div>
+      )}
+
+      <Card style={{ marginBottom:16 }}>
+        <SectionLabel>WATCHLIST · 自選清單</SectionLabel>
+        <div style={{ display:"flex", gap:8 }}>
+          <input value={addSym} onChange={e=>setAddSym(e.target.value)}
+            onKeyDown={e=>e.key==="Enter"&&addToList()}
+            placeholder="輸入代號（2330、TSLA）"
+            style={inputStyle} />
+          <button onClick={addToList}
+            style={{ padding:"10px 16px", borderRadius:10, border:"none", background:`linear-gradient(135deg,${C.accentDark},${C.accent})`, color:"#fff", fontWeight:700, fontSize:14, cursor:"pointer" }}>
+            加入
+          </button>
+        </div>
+      </Card>
+
+      {loading ? (
+        <div style={{ textAlign:"center", padding:40, color:C.muted }}><div style={{ fontSize:32 }}>🕊️</div><div>載入中⋯</div></div>
+      ) : list.length === 0 ? (
+        <Card><div style={{ textAlign:"center", padding:32, color:C.muted }}>還沒有自選股票，輸入代號開始新增</div></Card>
+      ) : (
+        <Card style={{ padding:0, overflow:"hidden" }}>
+          <div style={{ display:"grid", gridTemplateColumns:"80px 1fr 100px 100px 60px", gap:8, padding:"8px 16px", background:C.surface2, fontSize:11, color:C.muted, fontWeight:600 }}>
+            <span>代號</span><span>名稱</span><span style={{ textAlign:"right" }}>現價</span><span style={{ textAlign:"right" }}>漲跌</span><span></span>
+          </div>
+          {list.map(item => {
+            const p = prices[item.symbol];
+            const name = p?.name || item.name || item.symbol;
+            const market = item.market || detectMarket(item.symbol);
+            const cs = market === "US" ? "$" : market === "JP" ? "¥" : "NT$";
+            return (
+              <div key={item.symbol}
+                style={{ display:"grid", gridTemplateColumns:"80px 1fr 100px 100px 60px", gap:8, padding:"12px 16px", borderBottom:`1px solid ${C.surface2}`, alignItems:"center" }}
+                onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
+                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <span onClick={()=>onSelectStock&&onSelectStock(item.symbol)}
+                  style={{ fontSize:13, fontWeight:700, color:C.accent, cursor:"pointer" }}>{item.symbol}</span>
+                <span onClick={()=>onSelectStock&&onSelectStock(item.symbol)}
+                  style={{ fontSize:13, color:C.navy, cursor:"pointer" }}>{name}</span>
+                <span style={{ fontSize:13, fontWeight:700, color:C.navy, textAlign:"right", fontFamily:"monospace" }}>
+                  {p ? `${cs}${fmt(p.price)}` : "—"}
+                </span>
+                <span style={{ fontSize:12, textAlign:"right", color:p?.changePct>=0?C.up:C.down, fontFamily:"monospace" }}>
+                  {p ? fmtPct(p.changePct) : "—"}
+                </span>
+                <span style={{ textAlign:"right" }}>
+                  <button onClick={()=>removeFromList(item.symbol)}
+                    style={{ fontSize:12, color:C.faint, background:"transparent", border:"none", cursor:"pointer" }}>刪除</button>
+                </span>
+              </div>
+            );
+          })}
+        </Card>
+      )}
+
+      <div style={{ fontSize:12, color:C.muted, textAlign:"center", padding:"16px 0" }}>
+        🕊️「股咕股」溫馨提示：本工具僅為個人開發之數據整合與指標分析統計，並非提供任何形式的投資買賣建議。
+      </div>
     </div>
   );
 }
@@ -1014,9 +1191,10 @@ function LoginModal({ onClose, onLogin }) {
 // 主應用
 // ============================================================
 export default function App() {
-  const [tab,       setTab]       = useState("stock");
-  const [showLogin, setShowLogin] = useState(false);
-  const [user,      setUser]      = useState(null);
+  const [tab,         setTab]       = useState("stock");
+  const [showLogin,   setShowLogin] = useState(false);
+  const [user,        setUser]      = useState(null);
+  const [stockQuery,  setStockQuery] = useState(""); // 跨頁籤查詢
 
   // 監聽登入狀態
   useEffect(() => {
@@ -1038,6 +1216,7 @@ export default function App() {
   const tabs = [
     { id:"stock",     label:"🔍 股票" },
     { id:"screener",  label:"📊 選股" },
+    { id:"watchlist", label:"⭐ 自選組合" },
     { id:"portfolio", label:"💼 持倉" },
   ];
 
@@ -1077,8 +1256,9 @@ export default function App() {
 
       {/* Content */}
       <div style={{ maxWidth:960, margin:"0 auto", padding:"18px 14px 40px" }}>
-        {tab==="stock"     && <StockPage />}
-        {tab==="screener"  && <ScreenerPage />}
+        {tab==="stock"     && <StockPage initialQuery={stockQuery} onQueryUsed={()=>setStockQuery("")} />}
+        {tab==="screener"  && <ScreenerPage onSelectStock={sym=>{ setStockQuery(sym); setTab("stock"); }} user={user} />}
+        {tab==="watchlist" && <WatchlistPage user={user} onSelectStock={sym=>{ setStockQuery(sym); setTab("stock"); }} />}
         {tab==="portfolio" && <PortfolioPage user={user} />}
       </div>
     </div>
