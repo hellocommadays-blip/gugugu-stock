@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { createClient } from "@supabase/supabase-js";
+import { STOCK_LIST } from "./stockList.js";
 
 // ============================================================
 // Supabase 客戶端
@@ -56,83 +57,7 @@ function calcZone(price, benchmark) {
 // ============================================================
 // Mock 資料（自動補全用）
 // ============================================================
-const SUGGEST_LIST = [
-  // 台股 權值股
-  { sym:"2330", name:"台積電",   market:"TW" },
-  { sym:"2317", name:"鴻海",     market:"TW" },
-  { sym:"2454", name:"聯發科",   market:"TW" },
-  { sym:"2382", name:"廣達",     market:"TW" },
-  { sym:"2308", name:"台達電",   market:"TW" },
-  { sym:"2357", name:"華碩",     market:"TW" },
-  { sym:"2379", name:"瑞昱",     market:"TW" },
-  { sym:"2395", name:"研華",     market:"TW" },
-  { sym:"3711", name:"日月光投控",market:"TW" },
-  { sym:"2303", name:"聯電",     market:"TW" },
-  // 台股 傳產/鋼鐵
-  { sym:"2002", name:"中鋼",     market:"TW" },
-  { sym:"9933", name:"中鼎",     market:"TW" },
-  { sym:"1301", name:"台塑",     market:"TW" },
-  { sym:"1303", name:"南亞",     market:"TW" },
-  { sym:"1326", name:"台化",     market:"TW" },
-  { sym:"2006", name:"東和鋼鐵", market:"TW" },
-  { sym:"2015", name:"豐興",     market:"TW" },
-  { sym:"1102", name:"亞泥",     market:"TW" },
-  { sym:"1216", name:"統一",     market:"TW" },
-  { sym:"1301", name:"台塑",     market:"TW" },
-  // 台股 金融
-  { sym:"2881", name:"富邦金",   market:"TW" },
-  { sym:"2882", name:"國泰金",   market:"TW" },
-  { sym:"2886", name:"兆豐金",   market:"TW" },
-  { sym:"2891", name:"中信金",   market:"TW" },
-  { sym:"2884", name:"玉山金",   market:"TW" },
-  { sym:"2892", name:"第一金",   market:"TW" },
-  { sym:"2880", name:"華南金",   market:"TW" },
-  { sym:"2883", name:"凱基金",   market:"TW" },
-  { sym:"2885", name:"元大金",   market:"TW" },
-  { sym:"2887", name:"台新新光金",market:"TW" },
-  // 台股 航運
-  { sym:"2603", name:"長榮",     market:"TW" },
-  { sym:"2609", name:"陽明",     market:"TW" },
-  { sym:"2615", name:"萬海",     market:"TW" },
-  { sym:"2618", name:"長榮航",   market:"TW" },
-  { sym:"2610", name:"華航",     market:"TW" },
-  // 台股 ETF
-  { sym:"0050",  name:"元大台灣50",       market:"TW" },
-  { sym:"0056",  name:"元大高股息",       market:"TW" },
-  { sym:"00878", name:"國泰永續高股息",   market:"TW" },
-  { sym:"00919", name:"群益台灣精選高息", market:"TW" },
-  { sym:"00929", name:"復華台灣科技優息", market:"TW" },
-  { sym:"00940", name:"元大台灣價值高息", market:"TW" },
-  // 台股 其他
-  { sym:"2912", name:"統一超",   market:"TW" },
-  { sym:"2207", name:"和泰車",   market:"TW" },
-  { sym:"1722", name:"台肥",     market:"TW" },
-  { sym:"2412", name:"中華電",   market:"TW" },
-  { sym:"3045", name:"台灣大",   market:"TW" },
-  { sym:"4904", name:"遠傳",     market:"TW" },
-  { sym:"2633", name:"台灣高鐵", market:"TW" },
-  { sym:"5871", name:"中租-KY",  market:"TW" },
-  { sym:"2727", name:"王品",     market:"TW" },
-  { sym:"2201", name:"裕隆",     market:"TW" },
-  // 美股
-  { sym:"TSLA", name:"Tesla",     market:"US" },
-  { sym:"AAPL", name:"Apple",     market:"US" },
-  { sym:"NVDA", name:"Nvidia",    market:"US" },
-  { sym:"MSFT", name:"Microsoft", market:"US" },
-  { sym:"AMZN", name:"Amazon",    market:"US" },
-  { sym:"GOOGL",name:"Alphabet",  market:"US" },
-  { sym:"META", name:"Meta",      market:"US" },
-  { sym:"NFLX", name:"Netflix",   market:"US" },
-  { sym:"KO",   name:"Coca-Cola", market:"US" },
-  { sym:"DIS",  name:"Disney",    market:"US" },
-  { sym:"BRKB", name:"Berkshire", market:"US" },
-  { sym:"JPM",  name:"JPMorgan",  market:"US" },
-  // 日股
-  { sym:"7203", name:"Toyota",    market:"JP" },
-  { sym:"6758", name:"Sony",      market:"JP" },
-  { sym:"9984", name:"SoftBank",  market:"JP" },
-  { sym:"6861", name:"Keyence",   market:"JP" },
-];
+// STOCK_LIST 從 stockList.js 匯入
 
 const CS = { TWD:"NT$", USD:"$", JPY:"¥" };
 const ML = { TW:"台股", US:"美股", JP:"日股" };
@@ -377,7 +302,10 @@ function StockPage({ initialQuery='', onQueryUsed, onAddWatchlist }) {
                 style={{ padding:"10px 16px", cursor:"pointer", display:"flex", justifyContent:"space-between", alignItems:"center", borderBottom:`1px solid ${C.border}` }}
                 onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
                 onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                <span style={{ color:C.navy }}><b>{s.sym}</b> · {s.name}</span>
+                <div>
+                  <span style={{ color:C.navy }}><b>{s.sym}</b> · {s.name}</span>
+                  {s.industry && <span style={{ fontSize:11, color:C.faint, marginLeft:6 }}>｜{s.industry}</span>}
+                </div>
                 <Tag>{ML[s.market]}</Tag>
               </div>
             ))}
