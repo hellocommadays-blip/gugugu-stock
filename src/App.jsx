@@ -152,13 +152,14 @@ async function fetchStock(sym) {
   const market = detectMarket(sym);
 
   if (market === "TW") {
-    const [priceRes, finRes, epsRes, histRes, instRes, marginRes] = await Promise.all([
+    const [priceRes, finRes, epsRes, histRes, instRes, marginRes, companyRes] = await Promise.all([
       fetch(`/api/twse?type=price&stockNo=${sym}`).then(r=>r.json()),
       fetch(`/api/twse?type=financials&stockNo=${sym}`).then(r=>r.json()),
       fetch(`/api/twse?type=eps&stockNo=${sym}`).then(r=>r.json()),
       fetch(`/api/twse?type=history&stockNo=${sym}`).then(r=>r.json()),
       fetch(`/api/twse?type=institutional&stockNo=${sym}`).then(r=>r.json()),
       fetch(`/api/twse?type=margin&stockNo=${sym}`).then(r=>r.json()),
+      fetch(`/api/twse?type=company&stockNo=${sym}`).then(r=>r.json()).catch(()=>null),
     ]);
 
     if (!priceRes.success) throw new Error(priceRes.error || "查無此股票");
@@ -175,6 +176,8 @@ async function fetchStock(sym) {
     const dividendYield = fin?.dividendYield || null;
     const adjustedROE            = eps?.adjustedROE            || null;
     const adjustedEquityPerShare = eps?.adjustedEquityPerShare || null;
+    const company = (companyRes?.success && companyRes?.data) ? companyRes.data : null;
+    const industry = company?.industry || null;
     const isETF = sym.length >= 5 || sym.startsWith("0");
     const recentPrices = history.slice(-20).map(h=>h.price).filter(Boolean);
     const support = recentPrices.length ? Math.min(...recentPrices) : price.low;
@@ -188,7 +191,7 @@ async function fetchStock(sym) {
       roe: adjustedROE, adjustedROE, adjustedEquityPerShare,
       support, target, momentum: price.change,
       history: history.map(h=>({ date:h.date, price:h.price })),
-      inst, margin,
+      inst, margin, industry,
     };
 
   } else {
@@ -398,6 +401,7 @@ function StockPage({ initialQuery='', onQueryUsed, onAddWatchlist }) {
               <div>
                 <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom:6 }}>
                   <span style={{ fontSize:20, fontWeight:800, color:C.navy }}>{stock.name}</span>
+                  {stock.industry && <span style={{ fontSize:14, color:C.muted }}>｜{stock.industry}</span>}
                   <Tag color={C.navyMid}>{ML[stock.market]} · {stock.symbol}</Tag>
                   {stock.isETF && <Tag color="#B45309">ETF</Tag>}
                 </div>
