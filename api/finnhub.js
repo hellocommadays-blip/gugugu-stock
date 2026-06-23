@@ -26,7 +26,7 @@ export default async function handler(req, res) {
 
       // ── 即時報價 ─────────────────────────────────────────
       case 'quote': {
-        // 日股：Twelve Data（免費版每天800次，支援東証）
+        // 日股：Twelve Data（JPX 交易所）
         if (market === 'JP') {
           const TD_KEY = process.env.TWELVEDATA_API_KEY;
           if (!TD_KEY) {
@@ -34,10 +34,9 @@ export default async function handler(req, res) {
             return;
           }
 
-          const tdSym = `${symbol}`;
-          const url   = `https://api.twelvedata.com/quote?symbol=${tdSym}&exchange=TSE&apikey=${TD_KEY}`;
-          const r     = await fetch(url);
-          const q     = await r.json();
+          const url = `https://api.twelvedata.com/quote?symbol=${symbol}&mic_code=XJPX&apikey=${TD_KEY}`;
+          const r   = await fetch(url);
+          const q   = await r.json();
 
           if (q?.status === 'error' || !q?.close) {
             res.status(404).json({ error: `找不到日股 ${symbol}，請確認代號（範例：7203）` });
@@ -145,7 +144,7 @@ export default async function handler(req, res) {
 
         // 日股：Twelve Data 歷史
         if (market === 'JP' && TD_KEY) {
-          const url = `https://api.twelvedata.com/time_series?symbol=${symbol}&exchange=TSE&interval=1day&outputsize=60&apikey=${TD_KEY}`;
+          const url = `https://api.twelvedata.com/time_series?symbol=${symbol}&mic_code=XJPX&interval=1day&outputsize=60&apikey=${TD_KEY}`;
           const r   = await fetch(url);
           const raw = await r.json();
 
