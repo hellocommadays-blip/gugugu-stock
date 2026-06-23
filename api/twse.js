@@ -449,15 +449,31 @@ export default async function handler(req, res) {
 
       // ── 公司基本資料 ──────────────────────────────────────
       case 'company': {
+        // 產業代碼對照表（TWSE 官方分類）
+        const INDUSTRY_MAP = {
+          '01':'水泥工業','02':'食品工業','03':'塑膠工業','04':'紡織纖維',
+          '05':'電機機械','06':'電器電纜','07':'化學生技醫療','08':'玻璃陶瓷',
+          '09':'造紙工業','10':'鋼鐵工業','11':'橡膠工業','12':'汽車工業',
+          '13':'電子工業','14':'建材營造','15':'航運業','16':'觀光餐旅',
+          '17':'金融保險','18':'貿易百貨','19':'綜合','20':'其他',
+          '21':'化學工業','22':'生技醫療業','23':'油電燃氣業','24':'半導體業',
+          '25':'電腦及週邊設備業','26':'光電業','27':'通信網路業','28':'電子零組件業',
+          '29':'電子通路業','30':'資訊服務業','31':'其他電子業','32':'文化創意業',
+          '33':'農業科技業','34':'電子商務','35':'綠能環保','36':'數位雲端',
+          '37':'運動休閒','38':'居家生活','80':'管理股票','90':'存託憑證',
+        };
+
         const url = `https://openapi.twse.com.tw/v1/opendata/t187ap03_L`;
         const r   = await fetch(url);
         const raw = await r.json();
         const item = raw?.find(d => d['公司代號'] === stockNo);
         if (!item) { res.status(404).json({ error: '查無公司資料' }); return; }
+        const industryCode = item['產業別'];
         data = {
           code:     item['公司代號'],
           name:     item['公司簡稱'],
-          industry: item['產業別'],
+          industry: INDUSTRY_MAP[industryCode] || industryCode,
+          industryCode,
           chairman: item['董事長'],
           website:  item['網址'],
           listed:   item['上市日期'],
