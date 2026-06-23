@@ -262,7 +262,11 @@ function StockPage({ initialQuery='', onQueryUsed, onAddWatchlist }) {
     setQuery(val);
     if (!val) { setSugg([]); return; }
     const q = val.toLowerCase();
-    setSugg(SUGGEST_LIST.filter(s=>s.sym.toLowerCase().includes(q)||s.name.toLowerCase().includes(q)).slice(0,6));
+    setSugg(STOCK_LIST.filter(s =>
+      s.sym.toLowerCase().includes(q) ||
+      s.name.toLowerCase().includes(q) ||
+      (s.industry && s.industry.toLowerCase().includes(q))
+    ).slice(0, 8));
   }
 
   function select(sym) { setQuery(sym); setSugg([]); search(sym); }
