@@ -73,8 +73,8 @@ function detectMarket(sym) {
 // ============================================================
 // 真實 API 呼叫
 // ============================================================
-async function fetchStock(sym) {
-  const market = detectMarket(sym);
+async function fetchStock(sym, forceMarket=null) {
+  const market = forceMarket || detectMarket(sym);
 
   if (market === "TW") {
     const [priceRes, finRes, epsRes, histRes, instRes, marginRes, companyRes] = await Promise.all([
@@ -120,7 +120,7 @@ async function fetchStock(sym) {
     };
 
   } else {
-    const isJP = sym.endsWith(".T");
+    const isJP = sym.endsWith(".T") || market === "JP";
     const cleanSym = isJP ? sym.replace(".T","") : sym;
     const mkt = isJP ? "JP" : "US";
 
@@ -141,7 +141,7 @@ async function fetchStock(sym) {
 
     return {
       symbol: cleanSym, name: q.name, market: mkt,
-      currency: q.currency || (mkt==="JP"?"JPY":"USD"), isETF: false,
+      currency: mkt==="JP" ? "USD" : (q.currency || "USD"),  // 日股ADR以USD計價 isETF: false,
       price: q.price, change: q.change, changePct: q.changePct,
       open: q.open, high: q.high, low: q.low, prevClose: q.prevClose,
       pe: fin?.pe||null, pb: fin?.pb||null, dividendYield: fin?.dividendYield||null,
@@ -150,6 +150,7 @@ async function fetchStock(sym) {
       support, target, momentum: q.change, history,
       inst: null, margin: null,
       industry: q.industry || null,
+      isADR: q.isADR || false,
     };
   }
 }
@@ -270,24 +271,32 @@ function StockPage({ initialQuery='', onQueryUsed, onAddWatchlist }) {
   }
 
   function select(item) {
-    // 日股自動加 .T 後綴
-    const sym = item.market === "JP" ? `${item.sym}.T` : item.sym;
-    setQuery(sym); setSugg([]); search(sym);
+    const sym = item.sym;
+    setQuery(sym); setSugg([]);
+    // 日股傳入 market=JP，讓 fetchStock 知道是日股
+    searchWithMarket(sym, item.market);
   }
 
-  async function search(s) {
-    const sym = (s||query).trim().toUpperCase();
+  async function searchWithMarket(sym, market=null) {
     if (!sym) return;
-    setSugg([]); // 清除自動補全
+    setSugg([]);
     setLoading(true); setError(""); setStock(null);
     try {
-      const data = await fetchStock(sym);
+      const data = await fetchStock(sym, market);
       setStock(data);
     } catch(err) {
       setError(`找不到「${sym}」：${err.message}`);
     } finally {
       setLoading(false);
     }
+  }
+
+  async function search(s) {
+    const sym = (s||query).trim().toUpperCase();
+    if (!sym) return;
+    // 從 STOCK_LIST 找看有沒有對應的 market
+    const found = STOCK_LIST.find(i => i.sym === sym);
+    await searchWithMarket(sym, found?.market || null);
   }
 
   const bm   = stock ? calcBenchmark({ adjustedEquityPerShare:stock.adjustedEquityPerShare, adjustedROE:stock.adjustedROE/100 }) : null;
@@ -299,7 +308,7 @@ function StockPage({ initialQuery='', onQueryUsed, onAddWatchlist }) {
       <div style={{ position:"relative", marginBottom:24 }}>
         <div style={{ display:"flex", gap:8 }}>
           <input value={query} onChange={e=>onInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()}
-            placeholder="輸入代號或名稱（2330、台積電、TSLA、7203.T）"
+            placeholder="輸入代號或名稱（2330、台積電、TSLA、TM=Toyota）"
             style={{ flex:1, padding:"12px 16px", borderRadius:12, border:`1.5px solid ${C.border}`, background:C.surface, color:C.navy, fontSize:15, outline:"none" }} />
           <button onClick={()=>search()} style={{ padding:"12px 20px", borderRadius:12, border:"none", background:`linear-gradient(135deg,${C.accentDark},${C.accent})`, color:"#fff", fontWeight:700, fontSize:15, cursor:"pointer" }}>查詢</button>
         </div>
@@ -341,6 +350,7 @@ function StockPage({ initialQuery='', onQueryUsed, onAddWatchlist }) {
                   {stock.industry && <span style={{ fontSize:14, color:C.muted }}>｜{stock.industry}</span>}
                   <Tag color={C.navyMid}>{ML[stock.market]} · {stock.symbol}</Tag>
                   {stock.isETF && <Tag color="#B45309">ETF</Tag>}
+                  {stock.market==="JP" && stock.isADR && <Tag color="#7C3AED">ADR</Tag>}
                 </div>
                 <div style={{ fontSize:34, fontWeight:900, color:C.navy, fontFamily:"monospace", letterSpacing:-1 }}>{cs}{fmt(stock.price)}</div>
                 <div style={{ fontSize:15, marginTop:4, color:stock.change>=0?C.up:C.down, fontWeight:600 }}>
