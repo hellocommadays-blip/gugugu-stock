@@ -174,6 +174,37 @@ export default async function handler(req, res) {
         return;
       }
 
+      // ── 日股 debug ──────────────────────────────────────
+      case 'jptest': {
+        const AV_KEY = process.env.ALPHAVANTAGE_API_KEY;
+        const results = {};
+
+        // 測試各種格式
+        const formats = ['7203.T', '7203.TYO', '7203.TSE'];
+        for (const fmt of formats) {
+          try {
+            const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${fmt}&apikey=${AV_KEY}`;
+            const r = await fetch(url);
+            const d = await r.json();
+            results[fmt] = d?.['Global Quote']?.['05. price'] ? 'OK: ' + d['Global Quote']['05. price'] : 'EMPTY: ' + JSON.stringify(d).slice(0,100);
+          } catch(e) {
+            results[fmt] = 'ERROR: ' + e.message;
+          }
+        }
+
+        // 也測試 Finnhub 日股
+        try {
+          const r = await fetch(`${BASE}/quote?symbol=7203.T&token=${FINNHUB_KEY}`);
+          const d = await r.json();
+          results['finnhub_7203.T'] = d?.c ? 'OK: ' + d.c : 'EMPTY: ' + JSON.stringify(d).slice(0,100);
+        } catch(e) {
+          results['finnhub_7203.T'] = 'ERROR: ' + e.message;
+        }
+
+        res.status(200).json({ success: true, data: results });
+        return;
+      }
+
       default:
         res.status(400).json({ error: `未知 type: ${type}` });
     }
