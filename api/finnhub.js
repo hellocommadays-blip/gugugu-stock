@@ -209,11 +209,16 @@ export default async function handler(req, res) {
         const TD_KEY = process.env.TWELVEDATA_API_KEY;
         const results = {};
 
+        // 先用 symbol_search 找到完整代號資訊
+        const searchR = await fetch(`https://api.twelvedata.com/symbol_search?symbol=7203&apikey=${TD_KEY}`);
+        const searchD = await searchR.json();
+        const match   = searchD?.data?.[0];
+
         const tests = [
-          { label:'bare',       url:`https://api.twelvedata.com/quote?symbol=7203&apikey=${TD_KEY}` },
-          { label:'AAPL_test',  url:`https://api.twelvedata.com/quote?symbol=AAPL&apikey=${TD_KEY}` },
-          { label:'search',     url:`https://api.twelvedata.com/symbol_search?symbol=7203&apikey=${TD_KEY}` },
-          { label:'stocks_jp',  url:`https://api.twelvedata.com/stocks?country=Japan&apikey=${TD_KEY}&show_plan=true` },
+          { label:'search_full',    url:`https://api.twelvedata.com/symbol_search?symbol=7203&apikey=${TD_KEY}` },
+          { label:'with_mic',       url:`https://api.twelvedata.com/quote?symbol=${match?.symbol || '7203'}&mic_code=${match?.mic_code || 'XJPX'}&apikey=${TD_KEY}` },
+          { label:'7203_dot_T',     url:`https://api.twelvedata.com/quote?symbol=7203.T&apikey=${TD_KEY}` },
+          { label:'TM_us',          url:`https://api.twelvedata.com/quote?symbol=TM&apikey=${TD_KEY}` },
         ];
 
         for (const t of tests) {
