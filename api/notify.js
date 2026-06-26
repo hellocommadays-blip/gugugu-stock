@@ -4,7 +4,8 @@
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL    = process.env.SUPABASE_URL;
-const SUPABASE_KEY    = process.env.SUPABASE_ANON_KEY;
+const SUPABASE_KEY    = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY;
+// Service Key 可繞過 RLS，讀取所有用戶的 watchlist
 const TG_TOKEN        = process.env.TELEGRAM_BOT_TOKEN;
 const TG_CHAT_ID      = process.env.TELEGRAM_CHAT_ID;
 
@@ -105,12 +106,18 @@ export default async function handler(req, res) {
   try {
     // 從 Supabase 取得所有用戶的自選清單
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-    const { data: watchlist } = await supabase
+    const { data: watchlist, error: watchlistError } = await supabase
       .from('watchlist')
       .select('symbol, market, name, user_id');
 
+    // debug
+    if (watchlistError) {
+      res.status(200).json({ message: 'Supabase 錯誤', error: watchlistError.message, url: SUPABASE_URL ? '有設定' : '未設定', key: SUPABASE_KEY ? SUPABASE_KEY.slice(0,20)+'...' : '未設定' });
+      return;
+    }
+
     if (!watchlist?.length) {
-      res.status(200).json({ message: '自選清單為空' });
+      res.status(200).json({ message: '自選清單為空', count: watchlist?.length ?? 'null', url: SUPABASE_URL ? '有設定' : '未設定', key: SUPABASE_KEY ? SUPABASE_KEY.slice(0,20)+'...' : '未設定' });
       return;
     }
 
