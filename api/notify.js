@@ -89,13 +89,13 @@ async function sendTelegram(msg) {
 }
 
 export default async function handler(req, res) {
-  // 安全驗證：只允許 Vercel Cron 或帶正確 secret 的請求
-  const authHeader = req.headers['authorization'];
-  const secret     = process.env.CRON_SECRET;
-  if (secret && authHeader !== `Bearer ${secret}`) {
-    res.status(401).json({ error: 'Unauthorized' });
-    return;
-  }
+  // 安全驗證（暫時關閉，測試用）
+  // const authHeader = req.headers['authorization'];
+  // const secret     = process.env.CRON_SECRET;
+  // if (secret && authHeader !== `Bearer ${secret}`) {
+  //   res.status(401).json({ error: 'Unauthorized' });
+  //   return;
+  // }
 
   if (!TG_TOKEN || !TG_CHAT_ID) {
     res.status(500).json({ error: 'Telegram 未設定' });
