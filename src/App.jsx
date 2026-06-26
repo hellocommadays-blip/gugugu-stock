@@ -242,6 +242,130 @@ function KLineChart({ history, support, target, currSym }) {
 }
 
 // ============================================================
+// AI 巡檢元件
+// ============================================================
+function AIAnalysis({ stock, bm, zone }) {
+  const [loading,  setLoading]  = useState(false);
+  const [analysis, setAnalysis] = useState("");
+  const [error,    setError]    = useState("");
+  const [done,     setDone]     = useState(false);
+
+  if (!stock || stock.isETF) return null;
+
+  async function runAnalysis() {
+    setLoading(true); setAnalysis(""); setError(""); setDone(false);
+
+    const prompt = `請用繁體中文，以朋友的語氣分析這支股票，輸出三點白話重點（每點50字以內）：
+
+股票：${stock.name}（${stock.symbol}）
+市場：${stock.market === 'TW' ? '台股' : stock.market === 'US' ? '美股' : '日股'}
+產業：${stock.industry || '未知'}
+現價：${stock.price}
+估值區間：${zone?.zone || '無法計算'}（×${zone?.ratio?.toFixed(2) || 'N/A'}）
+基準值：${bm ? bm.toFixed(2) : '無法計算'}
+調整ROE：${stock.adjustedROE ? stock.adjustedROE.toFixed(2) + '%' : '無資料'}
+本益比PE：${stock.pe ? stock.pe + '×' : '無資料'}
+股價淨值比PB：${stock.pb ? stock.pb + '×' : '無資料'}
+殖利率：${stock.dividendYield ? stock.dividendYield + '%' : '無資料'}
+
+格式：
+1. 💰 估值狀況：（說明現在貴不貴）
+2. 📊 財務健康：（解讀ROE/殖利率/PE）
+3. ⚠️ 注意事項：（投資人應該留意什麼）
+
+不要給買賣建議，只分析現況。`;
+
+    try {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 1000,
+          stream: true,
+          system: "你是股咕股的 AI 巡檢助理，專門用白話文分析台美日股票。分析客觀，不給買賣建議，語氣像朋友聊天。",
+          messages: [{ role: "user", content: prompt }],
+        }),
+      });
+
+      if (!response.ok) throw new Error(`API 錯誤 ${response.status}`);
+
+      const reader  = response.body.getReader();
+      const decoder = new TextDecoder();
+      let   buffer  = "";
+
+      while (true) {
+        const { done: streamDone, value } = await reader.read();
+        if (streamDone) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop();
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const data = line.slice(6);
+          if (data === "[DONE]") continue;
+          try {
+            const parsed = JSON.parse(data);
+            const text   = parsed?.delta?.text || "";
+            if (text) setAnalysis(prev => prev + text);
+          } catch (_) {}
+        }
+      }
+      setDone(true);
+    } catch (err) {
+      setError("AI 巡檢暫時無法使用：" + err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Card>
+      <SectionLabel>AI ANALYSIS · 股咕股 AI 巡檢</SectionLabel>
+
+      {!analysis && !loading && !error && (
+        <button onClick={runAnalysis}
+          style={{ width:"100%", padding:"12px", borderRadius:12, border:"none", background:`linear-gradient(135deg,#6D28D9,#4A9EFF)`, color:"#fff", fontWeight:700, fontSize:15, cursor:"pointer" }}>
+          🤖 開始 AI 巡檢
+        </button>
+      )}
+
+      {loading && (
+        <div style={{ textAlign:"center", padding:"20px 0", color:C.muted }}>
+          <div style={{ fontSize:24, marginBottom:8 }}>🤖</div>
+          <div style={{ fontSize:14 }}>AI 巡檢中⋯</div>
+        </div>
+      )}
+
+      {analysis && (
+        <div>
+          <div style={{ fontSize:14, color:C.navy, lineHeight:1.8, whiteSpace:"pre-wrap", marginBottom:12 }}>
+            {analysis}
+            {!done && <span style={{ opacity:0.5 }}>▌</span>}
+          </div>
+          {done && (
+            <button onClick={()=>{ setAnalysis(""); setDone(false); }} 
+              style={{ fontSize:12, color:C.muted, background:"transparent", border:`1px solid ${C.border}`, borderRadius:8, padding:"4px 12px", cursor:"pointer" }}>
+              重新分析
+            </button>
+          )}
+        </div>
+      )}
+
+      {error && (
+        <div style={{ color:C.down, fontSize:13, padding:"8px 0" }}>{error}</div>
+      )}
+
+      <div style={{ fontSize:11, color:C.faint, marginTop:8 }}>
+        ⚠️ AI 分析僅供參考，不構成投資建議
+      </div>
+    </Card>
+  );
+}
+
+// ============================================================
 // 股票查詢頁
 // ============================================================
 function StockPage({ initialQuery='', onQueryUsed, onAddWatchlist }) {
@@ -523,6 +647,9 @@ function StockPage({ initialQuery='', onQueryUsed, onAddWatchlist }) {
               ))}
             </div>
           </Card>
+
+          {/* AI 巡檢 */}
+          <AIAnalysis stock={stock} bm={bm} zone={zone} />
 
           <div style={{ fontSize:12, color:C.muted, textAlign:"center", padding:"4px 0 12px" }}>
             🕊️「股咕股」溫馨提示：本工具僅為個人開發之數據整合與指標分析統計，並非提供任何形式的投資買賣建議。市場有風險，投資需謹慎，「股咕股」只負責啼叫報時，盈虧請用戶自負。
