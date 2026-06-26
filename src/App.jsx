@@ -15,24 +15,24 @@ const supabase = createClient(
 // 色票系統
 // ============================================================
 const C = {
-  bg:        "#F0F6FF",
-  surface:   "#FFFFFF",
-  surface2:  "#EAF2FF",
-  border:    "#C9DDF7",
-  navy:      "#1E3A5F",
-  navyMid:   "#2D5282",
-  muted:     "#6B87A8",
-  faint:     "#A8C2DC",
-  accent:    "#4A9EFF",
-  accentDark:"#1A6FCC",
-  up:        "#DC2626",   // 上漲紅（台灣習慣）
-  down:      "#16A34A",   // 下跌綠（台灣習慣）
-  z0: "#0D9488",
-  z1: "#16A34A",
-  z2: "#CA8A04",
-  z3: "#EA580C",
-  z4: "#DC2626",
-  z5: "#9B1C1C",
+  bg:        "#FFF8F3",   // 奶油白
+  surface:   "#FFFFFF",   // 純白
+  surface2:  "#FFF3EE",   // 粉橘白
+  border:    "#F0DDD6",   // 淡粉
+  navy:      "#3D2B2B",   // 深咖啡
+  navyMid:   "#6B4444",   // 次標題
+  muted:     "#9B7B78",   // 玫瑰灰
+  faint:     "#C4A49F",   // 粉米
+  accent:    "#F4845F",   // 珊瑚橘
+  accentDark:"#D45F3C",   // 深珊瑚
+  up:        "#E85D5D",   // 上漲玫瑰紅
+  down:      "#5BAD8F",   // 下跌薄荷綠
+  z0: "#5BAD8F", // 極低估（薄荷綠）
+  z1: "#85C88A", // 低估（嫩綠）
+  z2: "#F4C06F", // 合理（奶黃）
+  z3: "#F4A460", // 偏高（杏橘）
+  z4: "#E85D5D", // 高估（玫瑰紅）
+  z5: "#C94040", // 泡沫（深玫瑰）
 };
 
 // ============================================================
@@ -276,43 +276,16 @@ function AIAnalysis({ stock, bm, zone }) {
 不要給買賣建議，只分析現況。`;
 
     try {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
+      const response = await fetch("/api/claude", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-6",
-          max_tokens: 1000,
-          stream: true,
-          system: "你是股咕股的 AI 巡檢助理，專門用白話文分析台美日股票。分析客觀，不給買賣建議，語氣像朋友聊天。",
-          messages: [{ role: "user", content: prompt }],
-        }),
+        body: JSON.stringify({ stock, bm, zone }),
       });
 
-      if (!response.ok) throw new Error(`API 錯誤 ${response.status}`);
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error || "API 錯誤");
 
-      const reader  = response.body.getReader();
-      const decoder = new TextDecoder();
-      let   buffer  = "";
-
-      while (true) {
-        const { done: streamDone, value } = await reader.read();
-        if (streamDone) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop();
-
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const data = line.slice(6);
-          if (data === "[DONE]") continue;
-          try {
-            const parsed = JSON.parse(data);
-            const text   = parsed?.delta?.text || "";
-            if (text) setAnalysis(prev => prev + text);
-          } catch (_) {}
-        }
-      }
+      setAnalysis(data.analysis);
       setDone(true);
     } catch (err) {
       setError("AI 巡檢暫時無法使用：" + err.message);
