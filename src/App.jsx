@@ -388,6 +388,11 @@ function StockPage({ initialQuery='', onQueryUsed, onAddWatchlist }) {
           {bm && !stock.isETF && (
             <Card>
               <SectionLabel>PRICE BANDS · 價格基準值</SectionLabel>
+              {stock.isADR && (
+                <div style={{ background:"#F5F3FF", border:"1px solid #DDD6FE", borderRadius:10, padding:"8px 12px", marginBottom:12, fontSize:12, color:"#6D28D9" }}>
+                  ⚠️ 日股ADR財務數據以美元計，基準值僅供參考，無法與日圓股價直接比較。
+                </div>
+              )}
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:12 }}>
                 <InnerBox><div style={{ fontSize:13, color:C.navy }}>基準值</div><div style={{ fontSize:16, fontWeight:800, color:C.navy, fontFamily:"monospace" }}>{cs}{fmt(bm)}</div></InnerBox>
                 <InnerBox><div style={{ fontSize:13, color:C.navy }}>調整ROE</div><div style={{ fontSize:16, fontWeight:800, color:C.accent, fontFamily:"monospace" }}>{fmt(stock.adjustedROE)}%</div></InnerBox>
