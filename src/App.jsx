@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { createClient } from "@supabase/supabase-js";
-import { STOCK_LIST } from "./stockList.js";
+import { STOCK_LIST, SCREENER_US_DEDUP, SCREENER_JP } from "./stockList.js";
 
 // ============================================================
 // Supabase 客戶端
@@ -341,7 +341,7 @@ function AIAnalysis({ stock, bm, zone }) {
 // ============================================================
 // 股票查詢頁
 // ============================================================
-function StockPage({ initialQuery='', onQueryUsed, onAddWatchlist }) {
+function StockPage({ initialQuery='', initialMarket=null, onQueryUsed, onAddWatchlist }) {
   const [query, setQuery]     = useState(initialQuery);
   const [sugg,  setSugg]      = useState([]);
   const [stock, setStock]     = useState(null);
@@ -351,7 +351,7 @@ function StockPage({ initialQuery='', onQueryUsed, onAddWatchlist }) {
   // 跨頁籤查詢觸發
   useEffect(() => {
     if (initialQuery) {
-      search(initialQuery);
+      search(initialQuery, initialMarket);
       onQueryUsed && onQueryUsed();
     }
   }, [initialQuery]);
@@ -388,12 +388,12 @@ function StockPage({ initialQuery='', onQueryUsed, onAddWatchlist }) {
     }
   }
 
-  async function search(s) {
+  async function search(s, forceMarket=null) {
     const sym = (s||query).trim().toUpperCase();
     if (!sym) return;
     // 從 STOCK_LIST 找看有沒有對應的 market
     const found = STOCK_LIST.find(i => i.sym === sym);
-    await searchWithMarket(sym, found?.market || null);
+    await searchWithMarket(sym, forceMarket || found?.market || null);
   }
 
   const bm   = stock ? calcBenchmark({ adjustedEquityPerShare:stock.adjustedEquityPerShare, adjustedROE:stock.adjustedROE/100 }) : null;
@@ -634,22 +634,39 @@ function StockPage({ initialQuery='', onQueryUsed, onAddWatchlist }) {
 }
 
 // ============================================================
-// 選股頁（台股，真實資料）
+// 選股頁（台股 + 美股 + 日股）
 // ============================================================
 function ScreenerPage({ onSelectStock }) {
+  const [market,       setMarket]       = useState("TW"); // TW | US | JP
   const [selectedZone, setSelectedZone] = useState("全部");
   const [results,      setResults]      = useState([]);
   const [allResults,   setAllResults]   = useState([]);
   const [loading,      setLoading]      = useState(false);
   const [ran,          setRan]          = useState(false);
   const [dataDate,     setDataDate]     = useState("");
-  const [sortBy,       setSortBy]       = useState("zone"); // zone, pe, pb, divYield
+  const [sortBy,       setSortBy]       = useState("zone");
+  // 美/日股掃描進度
+  const [scanProgress, setScanProgress] = useState({ done:0, total:0 });
+  const [scanLog,      setScanLog]      = useState("");
 
   const zones     = ["全部","極低估區","低估區","合理區","偏高區","高估區","泡沫區"];
   const zoneColor = { "極低估區":C.z0,"低估區":C.z1,"合理區":C.z2,"偏高區":C.z3,"高估區":C.z4,"泡沫區":C.z5 };
   const zoneOrder = { "極低估區":0,"低估區":1,"合理區":2,"偏高區":3,"高估區":4,"泡沫區":5 };
 
-  async function run() {
+  // 市場切換時重置結果
+  function switchMarket(m) {
+    setMarket(m);
+    setRan(false);
+    setResults([]);
+    setAllResults([]);
+    setSelectedZone("全部");
+    setSortBy("zone");
+    setScanProgress({ done:0, total:0 });
+    setScanLog("");
+  }
+
+  // ── 台股掃描（TWSE API）──────────────────────────────────
+  async function runTW() {
     setLoading(true); setRan(true);
     try {
       const r    = await fetch('/api/twse?type=screener');
@@ -666,16 +683,98 @@ function ScreenerPage({ onSelectStock }) {
     }
   }
 
-  function filterAndSort(data, zone, sort) {
-    let filtered = zone === "全部" ? data : data.filter(s => s.zone === zone);
-    filtered = [...filtered].sort((a, b) => {
+  // ── 美/日股掃描（Finnhub，逐批控速）────────────────────────
+  async function runForeign(stockList, mkt) {
+    setLoading(true); setRan(true);
+    setScanProgress({ done:0, total:stockList.length });
+    setScanLog("");
+
+    const BATCH     = 4;   // 每批 4 檔同時查
+    const DELAY_MS  = 900; // 批次間等 0.9 秒（Finnhub 免費版 ~60req/min）
+    const collected = [];
+
+    for (let i = 0; i < stockList.length; i += BATCH) {
+      const batch = stockList.slice(i, i + BATCH);
+      setScanLog(`掃描中：${batch.map(s=>s.sym).join("、")}`);
+
+      const batchResults = await Promise.all(batch.map(async (s) => {
+        try {
+          const [quoteRes, finRes] = await Promise.all([
+            fetch(`/api/finnhub?symbol=${s.sym}&market=${mkt}&type=quote`).then(r=>r.json()),
+            fetch(`/api/finnhub?symbol=${s.sym}&market=${mkt}&type=financials`).then(r=>r.json()),
+          ]);
+          if (!quoteRes.success) return null;
+          const q   = quoteRes.data;
+          const fin = finRes.success ? finRes.data : null;
+
+          const adjustedROE           = fin?.adjustedROE           || null;
+          const adjustedEquityPerShare= fin?.adjustedEquityPerShare || null;
+          const bm  = (adjustedEquityPerShare && adjustedROE)
+            ? adjustedEquityPerShare * (adjustedROE / 100) * 10
+            : null;
+          const zoneInfo = bm ? calcZone(q.price, bm) : null;
+
+          return {
+            symbol:   s.sym,
+            name:     q.name || s.name,
+            industry: s.industry || q.industry || "—",
+            market:   mkt,
+            price:    q.price,
+            changePct:q.changePct,
+            pe:       fin?.pe       || null,
+            pb:       fin?.pb       || null,
+            divYield: fin?.dividendYield || null,
+            adjustedROE,
+            adjustedEquityPerShare,
+            bm,
+            zone:     zoneInfo?.zone  || "—",
+            ratio:    zoneInfo?.ratio || null,
+          };
+        } catch(_) { return null; }
+      }));
+
+      batchResults.forEach(r => r && collected.push(r));
+      setScanProgress(p => ({ ...p, done: Math.min(i + BATCH, stockList.length) }));
+
+      // 即時更新結果（邊掃邊顯示）
+      const sorted = sortItems([...collected], sortBy);
+      setAllResults([...collected]);
+      setResults(selectedZone === "全部" ? sorted : sorted.filter(s=>s.zone===selectedZone));
+
+      if (i + BATCH < stockList.length) {
+        await new Promise(r => setTimeout(r, DELAY_MS));
+      }
+    }
+
+    setScanLog("");
+    setLoading(false);
+  }
+
+  async function run() {
+    setSelectedZone("全部");
+    if (market === "TW") {
+      runTW();
+    } else if (market === "US") {
+      runForeign(SCREENER_US_DEDUP, "US");
+    } else {
+      runForeign(SCREENER_JP, "JP");
+    }
+  }
+
+  function sortItems(data, sort) {
+    return [...data].sort((a, b) => {
       if (sort === "zone")     return (zoneOrder[a.zone] || 0) - (zoneOrder[b.zone] || 0);
       if (sort === "pe")       return (a.pe || 999) - (b.pe || 999);
       if (sort === "pb")       return (a.pb || 999) - (b.pb || 999);
       if (sort === "divYield") return (b.divYield || 0) - (a.divYield || 0);
+      if (sort === "changePct")return (b.changePct || 0) - (a.changePct || 0);
       return 0;
     });
-    setResults(filtered);
+  }
+
+  function filterAndSort(data, zone, sort) {
+    let filtered = zone === "全部" ? data : data.filter(s => s.zone === zone);
+    setResults(sortItems(filtered, sort));
   }
 
   function onZoneChange(z) {
@@ -688,21 +787,49 @@ function ScreenerPage({ onSelectStock }) {
     filterAndSort(allResults, selectedZone, s);
   }
 
+  const isTW    = market === "TW";
+  const scanPct = scanProgress.total > 0
+    ? Math.round((scanProgress.done / scanProgress.total) * 100)
+    : 0;
+
+  // 市場對應的貨幣符號
+  const mktCS = { TW:"NT$", US:"$", JP:"$" }; // ADR 皆 USD
+  const cs = mktCS[market];
+
   return (
     <div>
       <Card style={{ marginBottom:16 }}>
-        <SectionLabel>篩選條件 · 台股上市</SectionLabel>
+        {/* 市場切換 */}
+        <div style={{ marginBottom:16 }}>
+          <SectionLabel>選擇市場</SectionLabel>
+          <div style={{ display:"flex", gap:8 }}>
+            {[["TW","🇹🇼 台股"],["US","🇺🇸 美股"],["JP","🇯🇵 日股ADR"]].map(([m, label]) => (
+              <button key={m} onClick={()=>switchMarket(m)}
+                style={{ flex:1, padding:"10px 8px", borderRadius:12, border:`2px solid ${market===m?C.accent:C.border}`, background:market===m?C.accent+"14":"transparent", color:market===m?C.accent:C.muted, fontWeight:market===m?700:400, fontSize:13, cursor:"pointer" }}>
+                {label}
+              </button>
+            ))}
+          </div>
+          {market !== "TW" && (
+            <div style={{ fontSize:11, color:C.faint, marginTop:8, lineHeight:1.6 }}>
+              {market === "US"
+                ? `⚡ 掃描 ${SCREENER_US_DEDUP.length} 檔美股（S&P 500核心 + 熱門科技）。Finnhub 免費版有速率限制，約需 ${Math.ceil(SCREENER_US_DEDUP.length/4)*1}–${Math.ceil(SCREENER_US_DEDUP.length/4)*1+1} 分鐘，掃描中可即時看到已完成的結果。`
+                : `⚡ 掃描 ${SCREENER_JP.length} 檔日股ADR（日經225主要成分）。ADR 以美元計價，估值基準值為美元數字，供相對比較用。`
+              }
+            </div>
+          )}
+        </div>
 
-        {/* 估值區間 */}
+        {/* 估值區間篩選 */}
         <div style={{ marginBottom:12 }}>
           <div style={{ fontSize:13, color:C.navy, marginBottom:8, fontWeight:600 }}>估值區間</div>
-          <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+          <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
             {zones.map(z=>{
               const active = selectedZone===z;
               const col    = zoneColor[z]||C.accent;
               return (
                 <button key={z} onClick={()=>onZoneChange(z)}
-                  style={{ padding:"6px 14px", borderRadius:20, border:`1.5px solid ${active?col:C.border}`, background:active?col+"18":"transparent", color:active?col:C.muted, fontSize:13, cursor:"pointer", fontWeight:active?700:400 }}>
+                  style={{ padding:"5px 12px", borderRadius:20, border:`1.5px solid ${active?col:C.border}`, background:active?col+"18":"transparent", color:active?col:C.muted, fontSize:12, cursor:"pointer", fontWeight:active?700:400 }}>
                   {z}
                 </button>
               );
@@ -713,10 +840,10 @@ function ScreenerPage({ onSelectStock }) {
         {/* 排序 */}
         <div style={{ marginBottom:16 }}>
           <div style={{ fontSize:13, color:C.navy, marginBottom:8, fontWeight:600 }}>排序方式</div>
-          <div style={{ display:"flex", gap:8 }}>
-            {[["zone","估值區間"],["pe","本益比↑"],["pb","淨值比↑"],["divYield","殖利率↓"]].map(([val,label])=>(
+          <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+            {[["zone","估值區間"],["pe","本益比↑"],["pb","淨值比↑"],["divYield","殖利率↓"],["changePct","漲跌幅↓"]].map(([val,label])=>(
               <button key={val} onClick={()=>onSortChange(val)}
-                style={{ padding:"6px 14px", borderRadius:20, border:`1.5px solid ${sortBy===val?C.accent:C.border}`, background:sortBy===val?C.accent+"18":"transparent", color:sortBy===val?C.accent:C.muted, fontSize:13, cursor:"pointer", fontWeight:sortBy===val?700:400 }}>
+                style={{ padding:"5px 12px", borderRadius:20, border:`1.5px solid ${sortBy===val?C.accent:C.border}`, background:sortBy===val?C.accent+"18":"transparent", color:sortBy===val?C.accent:C.muted, fontSize:12, cursor:"pointer", fontWeight:sortBy===val?700:400 }}>
                 {label}
               </button>
             ))}
@@ -725,64 +852,88 @@ function ScreenerPage({ onSelectStock }) {
 
         <button onClick={run} disabled={loading}
           style={{ width:"100%", padding:"12px", borderRadius:12, border:"none", background:`linear-gradient(135deg,${C.accentDark},${C.accent})`, color:"#fff", fontWeight:700, fontSize:15, cursor:"pointer", opacity:loading?0.7:1 }}>
-          {loading ? "掃描全市場中⋯" : "執行選股"}
+          {loading
+            ? (market==="TW" ? "掃描台股中⋯" : `掃描中 ${scanProgress.done}/${scanProgress.total}（${scanPct}%）`)
+            : `執行選股 · ${market==="TW"?"台股上市":market==="US"?"美股S&P500+":"日股ADR"}`
+          }
         </button>
+
+        {/* 美/日股進度條 */}
+        {loading && market !== "TW" && scanProgress.total > 0 && (
+          <div style={{ marginTop:12 }}>
+            <div style={{ height:6, borderRadius:3, background:C.border, overflow:"hidden" }}>
+              <div style={{ height:"100%", width:`${scanPct}%`, background:`linear-gradient(90deg,${C.accentDark},${C.accent})`, transition:"width 0.5s ease", borderRadius:3 }} />
+            </div>
+            {scanLog && (
+              <div style={{ fontSize:11, color:C.faint, marginTop:6, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                {scanLog}
+              </div>
+            )}
+          </div>
+        )}
       </Card>
 
       {ran && (
         <Card style={{ padding:0, overflow:"hidden" }}>
-          <div style={{ padding:"14px 20px", borderBottom:`1px solid ${C.border}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <div style={{ padding:"14px 20px", borderBottom:`1px solid ${C.border}`, display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8 }}>
             <span style={{ fontSize:14, fontWeight:700, color:C.navy }}>
-              {loading ? "載入中⋯" : `篩選結果 ${results.length} 檔`}
+              {loading && market!=="TW"
+                ? `已找到 ${results.length} 檔（掃描中⋯）`
+                : `篩選結果 ${results.length} 檔`
+              }
             </span>
-            <div style={{ fontSize:11, color:C.faint }}>
-              {dataDate && `資料日期：${dataDate}`}
-              <span style={{ marginLeft:8, color:C.faint }}>⚠️ 基準值為近似值</span>
+            <div style={{ fontSize:11, color:C.faint, display:"flex", gap:8, alignItems:"center" }}>
+              {dataDate && <span>資料日期：{dataDate}</span>}
+              {market !== "TW" && <span>⚠️ ADR 估值僅供相對比較</span>}
+              {market === "TW" && <span>⚠️ 基準值為近似值</span>}
             </div>
           </div>
 
-          {loading ? (
-            <div style={{ padding:40, textAlign:"center", color:C.muted }}>
-              <div style={{ fontSize:32, marginBottom:8 }}>🕊️</div>
-              <div>掃描全市場中，請稍候⋯</div>
+          {results.length === 0 && !loading ? (
+            <div style={{ padding:32, textAlign:"center", color:C.muted }}>
+              {ran ? "目前無符合條件的股票" : "點擊「執行選股」開始掃描"}
             </div>
-          ) : results.length === 0 ? (
-            <div style={{ padding:32, textAlign:"center", color:C.muted }}>目前無符合條件的股票</div>
           ) : (
             <div>
               {/* 表頭 */}
-              <div style={{ display:"grid", gridTemplateColumns:"70px 1fr 100px 90px 60px 60px 80px", gap:8, padding:"8px 16px", background:C.surface2, fontSize:11, color:C.muted, fontWeight:600 }}>
+              <div style={{ display:"grid", gridTemplateColumns:"72px 1fr 90px 88px 56px 64px 76px", gap:6, padding:"8px 14px", background:C.surface2, fontSize:11, color:C.muted, fontWeight:600 }}>
                 <span>代號</span>
                 <span>名稱</span>
                 <span>產業別</span>
-                <span style={{ textAlign:"right" }}>股價</span>
+                <span style={{ textAlign:"right" }}>現價</span>
                 <span style={{ textAlign:"right" }}>PE</span>
                 <span style={{ textAlign:"right" }}>殖利率</span>
                 <span style={{ textAlign:"right" }}>估值區間</span>
               </div>
-              {results.slice(0, 100).map(s=>(
-                <div key={s.symbol}
-                  onClick={()=>onSelectStock&&onSelectStock(s.symbol)}
-                  style={{ display:"grid", gridTemplateColumns:"70px 1fr 100px 90px 60px 60px 80px", gap:8, padding:"10px 16px", borderBottom:`1px solid ${C.surface2}`, alignItems:"center", cursor:"pointer" }}
-                  onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
-                  onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                  <span style={{ fontSize:13, fontWeight:700, color:C.navy }}>{s.symbol}</span>
-                  <span style={{ fontSize:13, color:C.navy, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.name}</span>
-                  <span style={{ fontSize:11, color:C.faint, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.industry||"—"}</span>
-                  <span style={{ fontSize:13, fontWeight:600, color:C.navy, textAlign:"right", fontFamily:"monospace" }}>
-                    {fmt(s.price)}
-                    {s.changePct != null && (
-                      <div style={{ fontSize:10, color:s.changePct>=0?C.up:C.down }}>{fmtPct(s.changePct)}</div>
-                    )}
-                  </span>
-                  <span style={{ fontSize:12, color:C.muted, textAlign:"right" }}>{s.pe ? fmt(s.pe,1) : "—"}</span>
-                  <span style={{ fontSize:12, color:C.muted, textAlign:"right" }}>{s.divYield ? `${fmt(s.divYield,1)}%` : "—"}</span>
-                  <span style={{ fontSize:11, fontWeight:700, color:zoneColor[s.zone]||C.muted, textAlign:"right" }}>{s.zone}</span>
-                </div>
-              ))}
-              {results.length > 100 && (
+              {results.slice(0, 150).map(s=>{
+                const sym = s.symbol || s.sym;
+                const displayCS = s.market === "TW" ? "NT$" : "$";
+                return (
+                  <div key={sym}
+                    onClick={()=>onSelectStock&&onSelectStock(sym, s.market||market)}
+                    style={{ display:"grid", gridTemplateColumns:"72px 1fr 90px 88px 56px 64px 76px", gap:6, padding:"10px 14px", borderBottom:`1px solid ${C.surface2}`, alignItems:"center", cursor:"pointer" }}
+                    onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
+                    onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                    <span style={{ fontSize:13, fontWeight:700, color:C.accent }}>{sym}</span>
+                    <span style={{ fontSize:12, color:C.navy, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.name}</span>
+                    <span style={{ fontSize:10, color:C.faint, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.industry||"—"}</span>
+                    <span style={{ fontSize:13, fontWeight:600, color:C.navy, textAlign:"right", fontFamily:"monospace" }}>
+                      {s.price ? `${displayCS}${fmt(s.price)}` : "—"}
+                      {s.changePct != null && (
+                        <div style={{ fontSize:10, color:s.changePct>=0?C.up:C.down }}>{fmtPct(s.changePct)}</div>
+                      )}
+                    </span>
+                    <span style={{ fontSize:12, color:C.muted, textAlign:"right" }}>{s.pe ? fmt(s.pe,1) : "—"}</span>
+                    <span style={{ fontSize:12, color:C.muted, textAlign:"right" }}>{(s.divYield||s.dividendYield) ? `${fmt(s.divYield||s.dividendYield,1)}%` : "—"}</span>
+                    <span style={{ fontSize:11, fontWeight:700, color:zoneColor[s.zone]||C.muted, textAlign:"right" }}>
+                      {s.zone !== "—" ? s.zone : <span style={{ color:C.faint }}>無資料</span>}
+                    </span>
+                  </div>
+                );
+              })}
+              {results.length > 150 && (
                 <div style={{ padding:"12px 16px", textAlign:"center", fontSize:12, color:C.muted }}>
-                  顯示前 100 筆，共 {results.length} 筆
+                  顯示前 150 筆，共 {results.length} 筆
                 </div>
               )}
             </div>
@@ -1323,6 +1474,7 @@ export default function App() {
   const [showLogin,   setShowLogin] = useState(false);
   const [user,        setUser]      = useState(null);
   const [stockQuery,  setStockQuery] = useState(""); // 跨頁籤查詢
+  const [stockMarket, setStockMarket] = useState(null); // 跨頁籤查詢市場
 
   // 監聽登入狀態
   useEffect(() => {
@@ -1384,7 +1536,7 @@ export default function App() {
 
       {/* Content */}
       <div style={{ maxWidth:960, margin:"0 auto", padding:"18px 14px 40px" }}>
-        {tab==="stock"     && <StockPage initialQuery={stockQuery} onQueryUsed={()=>setStockQuery("")} onAddWatchlist={async(stock)=>{
+        {tab==="stock"     && <StockPage initialQuery={stockQuery} initialMarket={stockMarket} onQueryUsed={()=>{ setStockQuery(""); setStockMarket(null); }} onAddWatchlist={async(stock)=>{
           if (!stock) return;
           const sym = stock.symbol; const market = stock.market || "TW"; const name = stock.name || sym;
           if (user) {
@@ -1397,7 +1549,7 @@ export default function App() {
           }
           alert(`已將 ${name}（${sym}）加入自選組合`);
         }} />}
-        {tab==="screener"  && <ScreenerPage onSelectStock={sym=>{ setStockQuery(sym); setTab("stock"); }} user={user} />}
+        {tab==="screener"  && <ScreenerPage onSelectStock={(sym, mkt)=>{ setStockQuery(sym); setStockMarket(mkt||null); setTab("stock"); }} user={user} />}
         {tab==="watchlist" && <WatchlistPage user={user} onSelectStock={sym=>{ setStockQuery(sym); setTab("stock"); }} />}
         {tab==="portfolio" && <PortfolioPage user={user} />}
       </div>
