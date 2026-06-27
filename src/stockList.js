@@ -399,52 +399,44 @@ export const SCREENER_US_DEDUP = SCREENER_US.filter(
 export const SCREENER_JP = [
   // ── 自動車 ──────────────────────────────────────────────
   { sym:"TM",    name:"Toyota / トヨタ",            industry:"自動車" },
-  { sym:"HMC",   name:"Honda / ホンダ",              industry:"自動車" },
-  { sym:"NSANY", name:"Nissan / 日産",               industry:"自動車" },
-  { sym:"MZDAY", name:"Mazda / マツダ",              industry:"自動車" },
-  { sym:"FUJHY", name:"Subaru / スバル",             industry:"自動車" },
-  { sym:"DNZOY", name:"Denso / デンソー",            industry:"自動車部品" },
+  { sym:"HMC",   name:"Honda / ホンダ",             industry:"自動車" },
+  { sym:"NSANY", name:"Nissan / 日産",              industry:"自動車" },
+  { sym:"MZDAY", name:"Mazda / マツダ",             industry:"自動車" },
+  { sym:"FUJHY", name:"Subaru / スバル",            industry:"自動車" },
+  { sym:"DNZOY", name:"Denso / デンソー",           industry:"自動車部品" },
 
   // ── 電機/電子 ────────────────────────────────────────────
-  { sym:"SONY",  name:"Sony / ソニー",               industry:"電機" },
-  { sym:"HTHIY", name:"Hitachi / 日立",              industry:"電機" },
-  { sym:"MSBHY", name:"Mitsubishi Electric / 三菱電機",industry:"電機" },
-  { sym:"NNDNY", name:"Nidec / ニデック",            industry:"電機" },
-  { sym:"KYCCF", name:"Kyocera / 京セラ",            industry:"電機" },
-  { sym:"ALPMY", name:"Alps Alpine / アルプス",      industry:"電子部品" },
-  { sym:"MRAAY", name:"Murata / 村田製作所",         industry:"電子部品" },
-  { sym:"TDK",   name:"TDK / TDK",                  industry:"電子部品" },
+  { sym:"SONY",  name:"Sony / ソニー",              industry:"電機" },
+  { sym:"HTHIY", name:"Hitachi / 日立",             industry:"電機" },
+  { sym:"NNDNY", name:"Nidec / ニデック",           industry:"電機" },
+  { sym:"KYCCF", name:"Kyocera / 京セラ",           industry:"電機" },
+  { sym:"ALPMY", name:"Alps Alpine / アルプス",     industry:"電子部品" },
+  { sym:"MRAAY", name:"Murata / 村田製作所",        industry:"電子部品" },
+  { sym:"TDK",   name:"TDK / TDK",                 industry:"電子部品" },
 
   // ── 半導体/精密機器 ──────────────────────────────────────
   { sym:"TOELY", name:"Tokyo Electron / 東京エレクトロン", industry:"半導体" },
-  { sym:"FANUY", name:"Fanuc / ファナック",          industry:"精密機器" },
-  { sym:"ADRNY", name:"Advantest / アドバンテスト",  industry:"半導体" },
-  { sym:"DSCSY", name:"Disco / ディスコ",            industry:"半導体" },
+  { sym:"FANUY", name:"Fanuc / ファナック",         industry:"精密機器" },
+  { sym:"ADRNY", name:"Advantest / アドバンテスト", industry:"半導体" },
 
   // ── 通信/IT ──────────────────────────────────────────────
-  { sym:"SFTBY", name:"SoftBank / ソフトバンク",     industry:"通信" },
-  { sym:"NTDTY", name:"NTT / 日本電信電話",          industry:"通信" },
-  { sym:"KDDIY", name:"KDDI / KDDI",                 industry:"通信" },
-  { sym:"KYOCY", name:"Kyocera / 京セラ（通信）",    industry:"通信" },
+  { sym:"SFTBY", name:"SoftBank / ソフトバンク",    industry:"通信" },
+  { sym:"NTDTY", name:"NTT / 日本電信電話",         industry:"通信" },
+  { sym:"KDDIY", name:"KDDI / KDDI",                industry:"通信" },
 
   // ── 金融 ────────────────────────────────────────────────
-  { sym:"MUFG",  name:"三菱UFJ / MUFG",              industry:"金融" },
-  { sym:"SMFG",  name:"三井住友 / SMFG",             industry:"金融" },
-  { sym:"MFG",   name:"みずほ / Mizuho",             industry:"金融" },
-  { sym:"DAIHY", name:"Dai-ichi Life / 第一生命",    industry:"保険" },
+  { sym:"MUFG",  name:"三菱UFJ / MUFG",             industry:"金融" },
+  { sym:"SMFG",  name:"三井住友 / SMFG",            industry:"金融" },
+  { sym:"MFG",   name:"みずほ / Mizuho",            industry:"金融" },
 
   // ── 素材/化学 ────────────────────────────────────────────
-  { sym:"MTLHY", name:"Mitsubishi Chemical / 三菱ケミカル", industry:"化学" },
-  { sym:"SHZNY", name:"Shin-Etsu Chemical / 信越化学",industry:"化学" },
-  { sym:"TOSYY", name:"Toshiba / 東芝",              industry:"電機" },
+  { sym:"SHZNY", name:"Shin-Etsu Chemical / 信越化学", industry:"化学" },
+  { sym:"DSNKY", name:"Daikin / ダイキン",          industry:"機械" },
 
   // ── 食品/消費 ────────────────────────────────────────────
-  { sym:"KNBWY", name:"Kirin Holdings / キリン",     industry:"食品・飲料" },
-  { sym:"ASBFY", name:"Asahi Group / アサヒ",        industry:"食品・飲料" },
-  { sym:"NSRGY", name:"Nissin Foods / 日清食品",     industry:"食品" },
-  { sym:"DSNKY", name:"Daikin / ダイキン",           industry:"機械" },
+  { sym:"KNBWY", name:"Kirin Holdings / キリン",    industry:"食品・飲料" },
+  { sym:"ASBFY", name:"Asahi Group / アサヒ",       industry:"食品・飲料" },
 
-  // ── 小売/サービス ────────────────────────────────────────
-  { sym:"NTDOY", name:"Nintendo / 任天堂",           industry:"ゲーム" },
-  { sym:"CCOEY", name:"Capcom / カプコン",           industry:"ゲーム" },
+  // ── ゲーム ───────────────────────────────────────────────
+  { sym:"NTDOY", name:"Nintendo / 任天堂",          industry:"ゲーム" },
 ];
