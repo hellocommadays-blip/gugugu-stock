@@ -1,5 +1,5 @@
-// stockList.js — 靜態股票清單（台股前150大 + 美股核心50 + 日股20）
-// 搜尋時先走本機比對，清單外的股票直接輸入代號查詢
+// stockList.js — 靜態股票清單（搜尋自動補全用）
+// 選股用的完整清單在下方 SCREENER_US / SCREENER_JP 匯出
 
 export const STOCK_LIST = [
   // ── 台股：半導體 ────────────────────────────────────────
@@ -129,10 +129,10 @@ export const STOCK_LIST = [
   // ── 台股：其他 ──────────────────────────────────────────
   { sym:"1102", name:"亞泥",       industry:"水泥工業",   market:"TW" },
   { sym:"1722", name:"台肥",       industry:"化學工業",   market:"TW" },
-    { sym:"9917", name:"中保科",     industry:"其他",       market:"TW" },
+  { sym:"9917", name:"中保科",     industry:"其他",       market:"TW" },
   { sym:"9914", name:"美利達",     industry:"其他",       market:"TW" },
   { sym:"9921", name:"巨大",       industry:"其他",       market:"TW" },
-  
+
   // ── 台股：ETF ───────────────────────────────────────────
   { sym:"0050",  name:"元大台灣50",         industry:"ETF", market:"TW" },
   { sym:"0056",  name:"元大高股息",         industry:"ETF", market:"TW" },
@@ -164,6 +164,16 @@ export const STOCK_LIST = [
   { sym:"ORCL",  name:"Oracle",             industry:"Technology",      market:"US" },
   { sym:"IBM",   name:"IBM",                industry:"Technology",      market:"US" },
   { sym:"ADBE",  name:"Adobe",              industry:"Technology",      market:"US" },
+  { sym:"NOW",   name:"ServiceNow",         industry:"Technology",      market:"US" },
+  { sym:"PLTR",  name:"Palantir",           industry:"Technology",      market:"US" },
+  { sym:"SNOW",  name:"Snowflake",          industry:"Technology",      market:"US" },
+  { sym:"UBER",  name:"Uber",               industry:"Technology",      market:"US" },
+  { sym:"LYFT",  name:"Lyft",               industry:"Technology",      market:"US" },
+  { sym:"ABNB",  name:"Airbnb",             industry:"Technology",      market:"US" },
+  { sym:"SHOP",  name:"Shopify",            industry:"Technology",      market:"US" },
+  { sym:"SQ",    name:"Block (Square)",     industry:"Fintech",         market:"US" },
+  { sym:"PYPL",  name:"PayPal",             industry:"Fintech",         market:"US" },
+  { sym:"COIN",  name:"Coinbase",           industry:"Fintech",         market:"US" },
 
   // ── 美股：金融 ──────────────────────────────────────────
   { sym:"JPM",   name:"JPMorgan Chase",     industry:"Banking",         market:"US" },
@@ -173,9 +183,13 @@ export const STOCK_LIST = [
   { sym:"MS",    name:"Morgan Stanley",     industry:"Finance",         market:"US" },
   { sym:"V",     name:"Visa",               industry:"Finance",         market:"US" },
   { sym:"MA",    name:"Mastercard",         industry:"Finance",         market:"US" },
-  { sym:"BRKB",  name:"Berkshire Hathaway", industry:"Finance",         market:"US" },
+  { sym:"BRK.B", name:"Berkshire Hathaway", industry:"Finance",         market:"US" },
   { sym:"AXP",   name:"American Express",   industry:"Finance",         market:"US" },
   { sym:"BLK",   name:"BlackRock",          industry:"Finance",         market:"US" },
+  { sym:"SCHW",  name:"Charles Schwab",     industry:"Finance",         market:"US" },
+  { sym:"C",     name:"Citigroup",          industry:"Banking",         market:"US" },
+  { sym:"USB",   name:"U.S. Bancorp",       industry:"Banking",         market:"US" },
+  { sym:"PNC",   name:"PNC Financial",      industry:"Banking",         market:"US" },
 
   // ── 美股：消費/零售 ─────────────────────────────────────
   { sym:"KO",    name:"Coca-Cola",          industry:"Beverages",       market:"US" },
@@ -187,6 +201,9 @@ export const STOCK_LIST = [
   { sym:"COST",  name:"Costco",             industry:"Retail",          market:"US" },
   { sym:"NKE",   name:"Nike",               industry:"Apparel",         market:"US" },
   { sym:"DIS",   name:"Disney",             industry:"Entertainment",   market:"US" },
+  { sym:"HD",    name:"Home Depot",         industry:"Retail",          market:"US" },
+  { sym:"LOW",   name:"Lowe's",             industry:"Retail",          market:"US" },
+  { sym:"AMGN",  name:"Amgen",              industry:"Biotechnology",   market:"US" },
 
   // ── 美股：醫療/能源 ─────────────────────────────────────
   { sym:"JNJ",   name:"Johnson & Johnson",  industry:"Healthcare",      market:"US" },
@@ -195,15 +212,242 @@ export const STOCK_LIST = [
   { sym:"XOM",   name:"ExxonMobil",         industry:"Energy",          market:"US" },
   { sym:"CVX",   name:"Chevron",            industry:"Energy",          market:"US" },
   { sym:"TSMC",  name:"TSMC ADR",           industry:"Semiconductors",  market:"US" },
+  { sym:"MRK",   name:"Merck",              industry:"Pharmaceuticals", market:"US" },
+  { sym:"ABBV",  name:"AbbVie",             industry:"Pharmaceuticals", market:"US" },
+  { sym:"LLY",   name:"Eli Lilly",          industry:"Pharmaceuticals", market:"US" },
+  { sym:"TMO",   name:"Thermo Fisher",      industry:"Healthcare",      market:"US" },
 
-  // ── 日股（用美國 ADR 代號查詢，透過 Finnhub）───────────
-  // ADR = American Depositary Receipt，在美國掛牌的日本股票
-  { sym:"TM",    name:"Toyota / トヨタ",      industry:"自動車",   market:"JP", adr:"TM"    },
-  { sym:"SONY",  name:"Sony / ソニー",        industry:"電機",     market:"JP", adr:"SONY"  },
-  { sym:"SFTBY", name:"SoftBank / ソフトバンク", industry:"通信",  market:"JP", adr:"SFTBY" },
-  { sym:"MUFG",  name:"三菱UFJ / MUFG",      industry:"金融",     market:"JP", adr:"MUFG"  },
-  { sym:"HMC",   name:"Honda / ホンダ",       industry:"自動車",   market:"JP", adr:"HMC"   },
-  { sym:"NTDOY", name:"Nintendo / 任天堂",    industry:"ゲーム",   market:"JP", adr:"NTDOY" },
-  { sym:"KYCCF", name:"Kyocera / 京セラ",     industry:"電機",     market:"JP", adr:"KYCCF" },
-  { sym:"FANUY", name:"Fanuc / ファナック",   industry:"機械",     market:"JP", adr:"FANUY" },
+  // ── 美股：工業/其他 ─────────────────────────────────────
+  { sym:"CAT",   name:"Caterpillar",        industry:"Industrials",     market:"US" },
+  { sym:"BA",    name:"Boeing",             industry:"Aerospace",       market:"US" },
+  { sym:"RTX",   name:"Raytheon",           industry:"Aerospace",       market:"US" },
+  { sym:"HON",   name:"Honeywell",          industry:"Industrials",     market:"US" },
+  { sym:"GE",    name:"GE Aerospace",       industry:"Industrials",     market:"US" },
+  { sym:"MMM",   name:"3M",                 industry:"Industrials",     market:"US" },
+  { sym:"LMT",   name:"Lockheed Martin",    industry:"Aerospace",       market:"US" },
+  { sym:"UPS",   name:"UPS",                industry:"Logistics",       market:"US" },
+  { sym:"FDX",   name:"FedEx",              industry:"Logistics",       market:"US" },
+
+  // ── 日股（用 ADR 代號查詢）───────────────────────────────
+  { sym:"TM",    name:"Toyota / トヨタ",         industry:"自動車",    market:"JP" },
+  { sym:"SONY",  name:"Sony / ソニー",           industry:"電機",      market:"JP" },
+  { sym:"SFTBY", name:"SoftBank / ソフトバンク", industry:"通信",      market:"JP" },
+  { sym:"MUFG",  name:"三菱UFJ / MUFG",          industry:"金融",      market:"JP" },
+  { sym:"HMC",   name:"Honda / ホンダ",           industry:"自動車",    market:"JP" },
+  { sym:"NTDOY", name:"Nintendo / 任天堂",        industry:"ゲーム",    market:"JP" },
+  { sym:"KYCCF", name:"Kyocera / 京セラ",         industry:"電機",      market:"JP" },
+  { sym:"FANUY", name:"Fanuc / ファナック",        industry:"機械",      market:"JP" },
+  { sym:"TOELY", name:"Tokyo Electron / 東京エレク", industry:"半導体", market:"JP" },
+  { sym:"SMFG",  name:"三井住友 / SMFG",          industry:"金融",      market:"JP" },
+  { sym:"MFG",   name:"みずほ / Mizuho",          industry:"金融",      market:"JP" },
+  { sym:"DSNKY", name:"Daikin / ダイキン",         industry:"機械",      market:"JP" },
+  { sym:"NNDNY", name:"Nidec / ニデック",          industry:"電機",      market:"JP" },
+  { sym:"HTHIY", name:"Hitachi / 日立",            industry:"電機",      market:"JP" },
+  { sym:"MSBHY", name:"Mitsubishi / 三菱電機",     industry:"電機",      market:"JP" },
+];
+
+// ============================================================
+// 選股用靜態清單（美股）
+// S&P 500 核心成分股 + 熱門科技股，共約 120 檔
+// Finnhub 免費版每分鐘 60 次，前端批次控速
+// ============================================================
+export const SCREENER_US = [
+  // ── 科技/AI/半導體 ──────────────────────────────────────
+  { sym:"AAPL",  name:"Apple",              industry:"Technology"      },
+  { sym:"MSFT",  name:"Microsoft",          industry:"Technology"      },
+  { sym:"NVDA",  name:"Nvidia",             industry:"Semiconductors"  },
+  { sym:"GOOGL", name:"Alphabet",           industry:"Technology"      },
+  { sym:"META",  name:"Meta Platforms",     industry:"Technology"      },
+  { sym:"AMZN",  name:"Amazon",             industry:"E-Commerce"      },
+  { sym:"TSLA",  name:"Tesla",              industry:"Automobiles"     },
+  { sym:"NFLX",  name:"Netflix",            industry:"Entertainment"   },
+  { sym:"AMD",   name:"AMD",                industry:"Semiconductors"  },
+  { sym:"INTC",  name:"Intel",              industry:"Semiconductors"  },
+  { sym:"QCOM",  name:"Qualcomm",           industry:"Semiconductors"  },
+  { sym:"AVGO",  name:"Broadcom",           industry:"Semiconductors"  },
+  { sym:"TSM",   name:"TSMC ADR",           industry:"Semiconductors"  },
+  { sym:"AMAT",  name:"Applied Materials",  industry:"Semiconductors"  },
+  { sym:"LRCX",  name:"Lam Research",       industry:"Semiconductors"  },
+  { sym:"KLAC",  name:"KLA Corp",           industry:"Semiconductors"  },
+  { sym:"MCHP",  name:"Microchip Tech",     industry:"Semiconductors"  },
+  { sym:"MRVL",  name:"Marvell Tech",       industry:"Semiconductors"  },
+  { sym:"ON",    name:"ON Semiconductor",   industry:"Semiconductors"  },
+  { sym:"TXN",   name:"Texas Instruments",  industry:"Semiconductors"  },
+  { sym:"CRM",   name:"Salesforce",         industry:"Technology"      },
+  { sym:"ORCL",  name:"Oracle",             industry:"Technology"      },
+  { sym:"IBM",   name:"IBM",                industry:"Technology"      },
+  { sym:"ADBE",  name:"Adobe",              industry:"Technology"      },
+  { sym:"NOW",   name:"ServiceNow",         industry:"Technology"      },
+  { sym:"PLTR",  name:"Palantir",           industry:"Technology"      },
+  { sym:"SNOW",  name:"Snowflake",          industry:"Technology"      },
+  { sym:"UBER",  name:"Uber",               industry:"Technology"      },
+  { sym:"ABNB",  name:"Airbnb",             industry:"Technology"      },
+  { sym:"SHOP",  name:"Shopify",            industry:"Technology"      },
+  { sym:"INTU",  name:"Intuit",             industry:"Technology"      },
+  { sym:"PANW",  name:"Palo Alto Networks", industry:"Cybersecurity"   },
+  { sym:"CRWD",  name:"CrowdStrike",        industry:"Cybersecurity"   },
+  { sym:"ZS",    name:"Zscaler",            industry:"Cybersecurity"   },
+  { sym:"DDOG",  name:"Datadog",            industry:"Technology"      },
+  { sym:"MDB",   name:"MongoDB",            industry:"Technology"      },
+  { sym:"NET",   name:"Cloudflare",         industry:"Technology"      },
+  { sym:"TWLO",  name:"Twilio",             industry:"Technology"      },
+  { sym:"OKTA",  name:"Okta",               industry:"Technology"      },
+  { sym:"GTLB",  name:"GitLab",             industry:"Technology"      },
+  { sym:"APP",   name:"AppLovin",           industry:"Technology"      },
+  { sym:"ARM",   name:"Arm Holdings",       industry:"Semiconductors"  },
+  { sym:"SMCI",  name:"Super Micro",        industry:"Technology"      },
+  { sym:"DELL",  name:"Dell Technologies",  industry:"Technology"      },
+  { sym:"HPQ",   name:"HP Inc.",            industry:"Technology"      },
+
+  // ── 金融 ────────────────────────────────────────────────
+  { sym:"JPM",   name:"JPMorgan Chase",     industry:"Banking"         },
+  { sym:"BAC",   name:"Bank of America",    industry:"Banking"         },
+  { sym:"WFC",   name:"Wells Fargo",        industry:"Banking"         },
+  { sym:"GS",    name:"Goldman Sachs",      industry:"Finance"         },
+  { sym:"MS",    name:"Morgan Stanley",     industry:"Finance"         },
+  { sym:"V",     name:"Visa",               industry:"Finance"         },
+  { sym:"MA",    name:"Mastercard",         industry:"Finance"         },
+  { sym:"AXP",   name:"American Express",   industry:"Finance"         },
+  { sym:"BLK",   name:"BlackRock",          industry:"Finance"         },
+  { sym:"SCHW",  name:"Charles Schwab",     industry:"Finance"         },
+  { sym:"C",     name:"Citigroup",          industry:"Banking"         },
+  { sym:"USB",   name:"U.S. Bancorp",       industry:"Banking"         },
+  { sym:"PNC",   name:"PNC Financial",      industry:"Banking"         },
+  { sym:"COF",   name:"Capital One",        industry:"Finance"         },
+  { sym:"SYF",   name:"Synchrony Financial",industry:"Finance"         },
+  { sym:"PYPL",  name:"PayPal",             industry:"Fintech"         },
+  { sym:"SQ",    name:"Block (Square)",     industry:"Fintech"         },
+  { sym:"COIN",  name:"Coinbase",           industry:"Fintech"         },
+
+  // ── 消費/零售 ────────────────────────────────────────────
+  { sym:"AMZN",  name:"Amazon",             industry:"E-Commerce"      },
+  { sym:"WMT",   name:"Walmart",            industry:"Retail"          },
+  { sym:"COST",  name:"Costco",             industry:"Retail"          },
+  { sym:"TGT",   name:"Target",             industry:"Retail"          },
+  { sym:"HD",    name:"Home Depot",         industry:"Retail"          },
+  { sym:"LOW",   name:"Lowe's",             industry:"Retail"          },
+  { sym:"MCD",   name:"McDonald's",         industry:"Restaurants"     },
+  { sym:"SBUX",  name:"Starbucks",          industry:"Restaurants"     },
+  { sym:"YUM",   name:"Yum! Brands",        industry:"Restaurants"     },
+  { sym:"CMG",   name:"Chipotle",           industry:"Restaurants"     },
+  { sym:"NKE",   name:"Nike",               industry:"Apparel"         },
+  { sym:"KO",    name:"Coca-Cola",          industry:"Beverages"       },
+  { sym:"PEP",   name:"PepsiCo",            industry:"Beverages"       },
+  { sym:"DIS",   name:"Disney",             industry:"Entertainment"   },
+  { sym:"NFLX",  name:"Netflix",            industry:"Entertainment"   },
+  { sym:"SPOT",  name:"Spotify",            industry:"Entertainment"   },
+  { sym:"EBAY",  name:"eBay",               industry:"E-Commerce"      },
+  { sym:"ETSY",  name:"Etsy",               industry:"E-Commerce"      },
+
+  // ── 醫療/生技 ────────────────────────────────────────────
+  { sym:"JNJ",   name:"Johnson & Johnson",  industry:"Healthcare"      },
+  { sym:"PFE",   name:"Pfizer",             industry:"Pharmaceuticals" },
+  { sym:"UNH",   name:"UnitedHealth",       industry:"Healthcare"      },
+  { sym:"MRK",   name:"Merck",              industry:"Pharmaceuticals" },
+  { sym:"ABBV",  name:"AbbVie",             industry:"Pharmaceuticals" },
+  { sym:"LLY",   name:"Eli Lilly",          industry:"Pharmaceuticals" },
+  { sym:"TMO",   name:"Thermo Fisher",      industry:"Healthcare"      },
+  { sym:"DHR",   name:"Danaher",            industry:"Healthcare"      },
+  { sym:"ISRG",  name:"Intuitive Surgical", industry:"Healthcare"      },
+  { sym:"GILD",  name:"Gilead Sciences",    industry:"Biotechnology"   },
+  { sym:"AMGN",  name:"Amgen",              industry:"Biotechnology"   },
+  { sym:"MRNA",  name:"Moderna",            industry:"Biotechnology"   },
+  { sym:"REGN",  name:"Regeneron",          industry:"Biotechnology"   },
+  { sym:"BIIB",  name:"Biogen",             industry:"Biotechnology"   },
+  { sym:"VRTX",  name:"Vertex Pharma",      industry:"Biotechnology"   },
+  { sym:"CVS",   name:"CVS Health",         industry:"Healthcare"      },
+  { sym:"CI",    name:"Cigna",              industry:"Healthcare"      },
+
+  // ── 能源/工業 ────────────────────────────────────────────
+  { sym:"XOM",   name:"ExxonMobil",         industry:"Energy"          },
+  { sym:"CVX",   name:"Chevron",            industry:"Energy"          },
+  { sym:"COP",   name:"ConocoPhillips",     industry:"Energy"          },
+  { sym:"OXY",   name:"Occidental",         industry:"Energy"          },
+  { sym:"SLB",   name:"SLB (Schlumberger)", industry:"Energy"          },
+  { sym:"CAT",   name:"Caterpillar",        industry:"Industrials"     },
+  { sym:"BA",    name:"Boeing",             industry:"Aerospace"       },
+  { sym:"RTX",   name:"Raytheon",           industry:"Aerospace"       },
+  { sym:"HON",   name:"Honeywell",          industry:"Industrials"     },
+  { sym:"GE",    name:"GE Aerospace",       industry:"Industrials"     },
+  { sym:"LMT",   name:"Lockheed Martin",    industry:"Aerospace"       },
+  { sym:"NOC",   name:"Northrop Grumman",   industry:"Aerospace"       },
+  { sym:"UPS",   name:"UPS",                industry:"Logistics"       },
+  { sym:"FDX",   name:"FedEx",              industry:"Logistics"       },
+  { sym:"DE",    name:"Deere & Company",    industry:"Industrials"     },
+  { sym:"EMR",   name:"Emerson Electric",   industry:"Industrials"     },
+
+  // ── REITs/公用事業 ───────────────────────────────────────
+  { sym:"NEE",   name:"NextEra Energy",     industry:"Utilities"       },
+  { sym:"DUK",   name:"Duke Energy",        industry:"Utilities"       },
+  { sym:"SO",    name:"Southern Company",   industry:"Utilities"       },
+  { sym:"D",     name:"Dominion Energy",    industry:"Utilities"       },
+  { sym:"AMT",   name:"American Tower",     industry:"REITs"           },
+  { sym:"PLD",   name:"Prologis",           industry:"REITs"           },
+  { sym:"CCI",   name:"Crown Castle",       industry:"REITs"           },
+  { sym:"EQIX",  name:"Equinix",            industry:"REITs"           },
+];
+
+// 去重（AMZN/NFLX 在兩個分類都出現）
+const _seenUS = new Set();
+export const SCREENER_US_DEDUP = SCREENER_US.filter(s => {
+  if (_seenUS.has(s.sym)) return false;
+  _seenUS.add(s.sym);
+  return true;
+});
+
+// ============================================================
+// 選股用靜態清單（日股 ADR — 日經225 主要成分的 ADR）
+// 共約 35 檔，用 Finnhub 美股報價
+// ============================================================
+export const SCREENER_JP = [
+  // ── 自動車 ──────────────────────────────────────────────
+  { sym:"TM",    name:"Toyota / トヨタ",            industry:"自動車" },
+  { sym:"HMC",   name:"Honda / ホンダ",              industry:"自動車" },
+  { sym:"NSANY", name:"Nissan / 日産",               industry:"自動車" },
+  { sym:"MZDAY", name:"Mazda / マツダ",              industry:"自動車" },
+  { sym:"FUJHY", name:"Subaru / スバル",             industry:"自動車" },
+  { sym:"DNZOY", name:"Denso / デンソー",            industry:"自動車部品" },
+
+  // ── 電機/電子 ────────────────────────────────────────────
+  { sym:"SONY",  name:"Sony / ソニー",               industry:"電機" },
+  { sym:"HTHIY", name:"Hitachi / 日立",              industry:"電機" },
+  { sym:"MSBHY", name:"Mitsubishi Electric / 三菱電機",industry:"電機" },
+  { sym:"NNDNY", name:"Nidec / ニデック",            industry:"電機" },
+  { sym:"KYCCF", name:"Kyocera / 京セラ",            industry:"電機" },
+  { sym:"ALPMY", name:"Alps Alpine / アルプス",      industry:"電子部品" },
+  { sym:"MRAAY", name:"Murata / 村田製作所",         industry:"電子部品" },
+  { sym:"TDK",   name:"TDK / TDK",                  industry:"電子部品" },
+
+  // ── 半導体/精密機器 ──────────────────────────────────────
+  { sym:"TOELY", name:"Tokyo Electron / 東京エレクトロン", industry:"半導体" },
+  { sym:"FANUY", name:"Fanuc / ファナック",          industry:"精密機器" },
+  { sym:"ADRNY", name:"Advantest / アドバンテスト",  industry:"半導体" },
+  { sym:"DSCSY", name:"Disco / ディスコ",            industry:"半導体" },
+
+  // ── 通信/IT ──────────────────────────────────────────────
+  { sym:"SFTBY", name:"SoftBank / ソフトバンク",     industry:"通信" },
+  { sym:"NTDTY", name:"NTT / 日本電信電話",          industry:"通信" },
+  { sym:"KDDIY", name:"KDDI / KDDI",                 industry:"通信" },
+  { sym:"KYOCY", name:"Kyocera / 京セラ（通信）",    industry:"通信" },
+
+  // ── 金融 ────────────────────────────────────────────────
+  { sym:"MUFG",  name:"三菱UFJ / MUFG",              industry:"金融" },
+  { sym:"SMFG",  name:"三井住友 / SMFG",             industry:"金融" },
+  { sym:"MFG",   name:"みずほ / Mizuho",             industry:"金融" },
+  { sym:"DAIHY", name:"Dai-ichi Life / 第一生命",    industry:"保険" },
+
+  // ── 素材/化学 ────────────────────────────────────────────
+  { sym:"MTLHY", name:"Mitsubishi Chemical / 三菱ケミカル", industry:"化学" },
+  { sym:"SHZNY", name:"Shin-Etsu Chemical / 信越化学",industry:"化学" },
+  { sym:"TOSYY", name:"Toshiba / 東芝",              industry:"電機" },
+
+  // ── 食品/消費 ────────────────────────────────────────────
+  { sym:"KNBWY", name:"Kirin Holdings / キリン",     industry:"食品・飲料" },
+  { sym:"ASBFY", name:"Asahi Group / アサヒ",        industry:"食品・飲料" },
+  { sym:"NSRGY", name:"Nissin Foods / 日清食品",     industry:"食品" },
+  { sym:"DSNKY", name:"Daikin / ダイキン",           industry:"機械" },
+
+  // ── 小売/サービス ────────────────────────────────────────
+  { sym:"NTDOY", name:"Nintendo / 任天堂",           industry:"ゲーム" },
+  { sym:"CCOEY", name:"Capcom / カプコン",           industry:"ゲーム" },
 ];
