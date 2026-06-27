@@ -689,8 +689,8 @@ function ScreenerPage({ onSelectStock }) {
     setScanProgress({ done:0, total:stockList.length });
     setScanLog("");
 
-    const BATCH     = 4;   // 每批 4 檔同時查
-    const DELAY_MS  = 900; // 批次間等 0.9 秒（Finnhub 免費版 ~60req/min）
+    const BATCH     = 5;   // 每批 5 檔同時查
+    const DELAY_MS  = 500; // 批次間等 0.5 秒（Yahoo 無限速，Finnhub quote ~60req/min）
     const collected = [];
 
     for (let i = 0; i < stockList.length; i += BATCH) {
@@ -709,16 +709,20 @@ function ScreenerPage({ onSelectStock }) {
               return r.json().catch(() => null);
             } catch (_) { return null; }
           };
+          // quote: Finnhub（快）；financials: Yahoo（覆蓋率廣）
+          // 日股ADR market=JP，Yahoo 也用 US 查（ADR 在美掛牌）
+          const yahooMkt = mkt === 'JP' ? 'US' : mkt;
           const [quoteRes, finRes] = await Promise.all([
             safeFetch(`/api/finnhub?symbol=${s.sym}&market=${mkt}&type=quote`),
-            safeFetch(`/api/finnhub?symbol=${s.sym}&market=${mkt}&type=financials`),
+            safeFetch(`/api/yahoo?symbol=${s.sym}&market=${yahooMkt}&type=financials`),
           ]);
           if (!quoteRes?.success) return null;
           const q   = quoteRes.data;
           const fin = finRes?.success ? finRes.data : null;
 
-          const adjustedROE           = fin?.adjustedROE           || null;
-          const adjustedEquityPerShare= fin?.adjustedEquityPerShare || null;
+          // Yahoo 回傳 adjustedROE 和 adjustedEquityPerShare
+          const adjustedROE            = fin?.adjustedROE            || fin?.roe            || null;
+          const adjustedEquityPerShare = fin?.adjustedEquityPerShare || fin?.bookValue      || null;
           const bm  = (adjustedEquityPerShare && adjustedROE)
             ? adjustedEquityPerShare * (adjustedROE / 100) * 10
             : null;
@@ -731,9 +735,9 @@ function ScreenerPage({ onSelectStock }) {
             market:   mkt,
             price:    q.price,
             changePct:q.changePct,
-            pe:       fin?.pe       || null,
-            pb:       fin?.pb       || null,
-            divYield: fin?.dividendYield || null,
+            pe:       fin?.pe                   || null,
+            pb:       fin?.pb                   || null,
+            divYield: fin?.dividendYield        || null,
             adjustedROE,
             adjustedEquityPerShare,
             bm,
