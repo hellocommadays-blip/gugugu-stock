@@ -709,12 +709,12 @@ function ScreenerPage({ onSelectStock }) {
               return r.json().catch(() => null);
             } catch (_) { return null; }
           };
-          // quote + financials 全用 Yahoo（覆蓋率 100%，美日股全支援）
-          // 日股ADR 在美掛牌，Yahoo 用 US 查
-          const yahooMkt = mkt === 'JP' ? 'US' : mkt;
+          // quote + financials 用 Finnhub（精選支援清單）
+          // 日股ADR 在美掛牌，用 market=US 查
+          const fhMkt = mkt === 'JP' ? 'US' : mkt;
           const [quoteRes, finRes] = await Promise.all([
-            safeFetch(`/api/yahoo?symbol=${s.sym}&market=${yahooMkt}&type=quote`),
-            safeFetch(`/api/yahoo?symbol=${s.sym}&market=${yahooMkt}&type=financials`),
+            safeFetch(`/api/finnhub?symbol=${s.sym}&market=${fhMkt}&type=quote`),
+            safeFetch(`/api/finnhub?symbol=${s.sym}&market=${fhMkt}&type=financials`),
           ]);
           if (!quoteRes?.success) return null;
           const q   = quoteRes.data;
