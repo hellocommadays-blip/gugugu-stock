@@ -3,6 +3,18 @@
 const FINNHUB_KEY = process.env.FINNHUB_API_KEY;
 const BASE = 'https://finnhub.io/api/v1';
 
+// 加 timeout 的 fetch（預設 8 秒，避免 Vercel 10s limit 超時）
+async function fetchWithTimeout(url, timeoutMs = 8000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const r = await fetch(url, { signal: controller.signal });
+    return r;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -30,8 +42,8 @@ export default async function handler(req, res) {
         // 使用者輸入 ADR 代號（TM、SONY、HMC 等），market=JP 代表是日股ADR
         if (market === 'JP') {
           const [quoteRes, profileRes] = await Promise.all([
-            fetch(`${BASE}/quote?symbol=${symbol}&token=${FINNHUB_KEY}`),
-            fetch(`${BASE}/stock/profile2?symbol=${symbol}&token=${FINNHUB_KEY}`),
+            fetchWithTimeout(`${BASE}/quote?symbol=${symbol}&token=${FINNHUB_KEY}`),
+            fetchWithTimeout(`${BASE}/stock/profile2?symbol=${symbol}&token=${FINNHUB_KEY}`),
           ]);
           const quote   = await quoteRes.json();
           const profile = await profileRes.json();
@@ -68,8 +80,8 @@ export default async function handler(req, res) {
 
         // 美股：Finnhub
         const [quoteRes, profileRes] = await Promise.all([
-          fetch(`${BASE}/quote?symbol=${fhSymbol}&token=${FINNHUB_KEY}`),
-          fetch(`${BASE}/stock/profile2?symbol=${fhSymbol}&token=${FINNHUB_KEY}`),
+          fetchWithTimeout(`${BASE}/quote?symbol=${fhSymbol}&token=${FINNHUB_KEY}`),
+          fetchWithTimeout(`${BASE}/stock/profile2?symbol=${fhSymbol}&token=${FINNHUB_KEY}`),
         ]);
         const quote   = await quoteRes.json();
         const profile = await profileRes.json();
@@ -105,7 +117,7 @@ export default async function handler(req, res) {
 
       // ── 財務數據（基本指標）──────────────────────────────
       case 'financials': {
-        const r   = await fetch(`${BASE}/stock/metric?symbol=${fhSymbol}&metric=all&token=${FINNHUB_KEY}`);
+        const r   = await fetchWithTimeout(`${BASE}/stock/metric?symbol=${fhSymbol}&metric=all&token=${FINNHUB_KEY}`);
         const raw = await r.json();
         const m   = raw?.metric || {};
 
