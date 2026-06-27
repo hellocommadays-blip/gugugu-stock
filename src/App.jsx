@@ -699,13 +699,18 @@ function ScreenerPage({ onSelectStock }) {
 
       const batchResults = await Promise.all(batch.map(async (s) => {
         try {
+          const safeFetch = async (url) => {
+            const r = await fetch(url);
+            if (!r.ok) return null;
+            return r.json().catch(() => null);
+          };
           const [quoteRes, finRes] = await Promise.all([
-            fetch(`/api/finnhub?symbol=${s.sym}&market=${mkt}&type=quote`).then(r=>r.json()),
-            fetch(`/api/finnhub?symbol=${s.sym}&market=${mkt}&type=financials`).then(r=>r.json()),
+            safeFetch(`/api/finnhub?symbol=${s.sym}&market=${mkt}&type=quote`),
+            safeFetch(`/api/finnhub?symbol=${s.sym}&market=${mkt}&type=financials`),
           ]);
-          if (!quoteRes.success) return null;
+          if (!quoteRes?.success) return null;
           const q   = quoteRes.data;
-          const fin = finRes.success ? finRes.data : null;
+          const fin = finRes?.success ? finRes.data : null;
 
           const adjustedROE           = fin?.adjustedROE           || null;
           const adjustedEquityPerShare= fin?.adjustedEquityPerShare || null;
