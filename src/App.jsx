@@ -700,9 +700,14 @@ function ScreenerPage({ onSelectStock }) {
       const batchResults = await Promise.all(batch.map(async (s) => {
         try {
           const safeFetch = async (url) => {
-            const r = await fetch(url);
-            if (!r.ok) return null;
-            return r.json().catch(() => null);
+            try {
+              const controller = new AbortController();
+              const timer = setTimeout(() => controller.abort(), 9000);
+              const r = await fetch(url, { signal: controller.signal });
+              clearTimeout(timer);
+              if (!r.ok) return null;
+              return r.json().catch(() => null);
+            } catch (_) { return null; }
           };
           const [quoteRes, finRes] = await Promise.all([
             safeFetch(`/api/finnhub?symbol=${s.sym}&market=${mkt}&type=quote`),
