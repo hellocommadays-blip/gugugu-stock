@@ -168,7 +168,6 @@ export const STOCK_LIST = [
   { sym:"PLTR",  name:"Palantir",           industry:"Technology",      market:"US" },
   { sym:"SNOW",  name:"Snowflake",          industry:"Technology",      market:"US" },
   { sym:"UBER",  name:"Uber",               industry:"Technology",      market:"US" },
-  { sym:"LYFT",  name:"Lyft",               industry:"Technology",      market:"US" },
   { sym:"ABNB",  name:"Airbnb",             industry:"Technology",      market:"US" },
   { sym:"SHOP",  name:"Shopify",            industry:"Technology",      market:"US" },
   { sym:"SQ",    name:"Block (Square)",     industry:"Fintech",         market:"US" },
@@ -203,7 +202,6 @@ export const STOCK_LIST = [
   { sym:"DIS",   name:"Disney",             industry:"Entertainment",   market:"US" },
   { sym:"HD",    name:"Home Depot",         industry:"Retail",          market:"US" },
   { sym:"LOW",   name:"Lowe's",             industry:"Retail",          market:"US" },
-  { sym:"AMGN",  name:"Amgen",              industry:"Biotechnology",   market:"US" },
 
   // ── 美股：醫療/能源 ─────────────────────────────────────
   { sym:"JNJ",   name:"Johnson & Johnson",  industry:"Healthcare",      market:"US" },
@@ -218,15 +216,6 @@ export const STOCK_LIST = [
   { sym:"TMO",   name:"Thermo Fisher",      industry:"Healthcare",      market:"US" },
 
   // ── 美股：工業/其他 ─────────────────────────────────────
-  { sym:"CAT",   name:"Caterpillar",        industry:"Industrials",     market:"US" },
-  { sym:"BA",    name:"Boeing",             industry:"Aerospace",       market:"US" },
-  { sym:"RTX",   name:"Raytheon",           industry:"Aerospace",       market:"US" },
-  { sym:"HON",   name:"Honeywell",          industry:"Industrials",     market:"US" },
-  { sym:"GE",    name:"GE Aerospace",       industry:"Industrials",     market:"US" },
-  { sym:"MMM",   name:"3M",                 industry:"Industrials",     market:"US" },
-  { sym:"LMT",   name:"Lockheed Martin",    industry:"Aerospace",       market:"US" },
-  { sym:"UPS",   name:"UPS",                industry:"Logistics",       market:"US" },
-  { sym:"FDX",   name:"FedEx",              industry:"Logistics",       market:"US" },
 
   // ── 日股（用 ADR 代號查詢）───────────────────────────────
   { sym:"TM",    name:"Toyota / トヨタ",         industry:"自動車",    market:"JP" },
@@ -290,9 +279,7 @@ export const SCREENER_US = [
   { sym:"DDOG",  name:"Datadog",            industry:"Technology"      },
   { sym:"MDB",   name:"MongoDB",            industry:"Technology"      },
   { sym:"NET",   name:"Cloudflare",         industry:"Technology"      },
-  { sym:"TWLO",  name:"Twilio",             industry:"Technology"      },
   { sym:"OKTA",  name:"Okta",               industry:"Technology"      },
-  { sym:"GTLB",  name:"GitLab",             industry:"Technology"      },
   { sym:"APP",   name:"AppLovin",           industry:"Technology"      },
   { sym:"ARM",   name:"Arm Holdings",       industry:"Semiconductors"  },
   { sym:"SMCI",  name:"Super Micro",        industry:"Technology"      },
@@ -314,7 +301,6 @@ export const SCREENER_US = [
   { sym:"USB",   name:"U.S. Bancorp",       industry:"Banking"         },
   { sym:"PNC",   name:"PNC Financial",      industry:"Banking"         },
   { sym:"COF",   name:"Capital One",        industry:"Finance"         },
-  { sym:"SYF",   name:"Synchrony Financial",industry:"Finance"         },
   { sym:"PYPL",  name:"PayPal",             industry:"Fintech"         },
   { sym:"SQ",    name:"Block (Square)",     industry:"Fintech"         },
   { sym:"COIN",  name:"Coinbase",           industry:"Fintech"         },
@@ -350,7 +336,6 @@ export const SCREENER_US = [
   { sym:"DHR",   name:"Danaher",            industry:"Healthcare"      },
   { sym:"ISRG",  name:"Intuitive Surgical", industry:"Healthcare"      },
   { sym:"GILD",  name:"Gilead Sciences",    industry:"Biotechnology"   },
-  { sym:"AMGN",  name:"Amgen",              industry:"Biotechnology"   },
   { sym:"MRNA",  name:"Moderna",            industry:"Biotechnology"   },
   { sym:"REGN",  name:"Regeneron",          industry:"Biotechnology"   },
   { sym:"BIIB",  name:"Biogen",             industry:"Biotechnology"   },
@@ -364,23 +349,25 @@ export const SCREENER_US = [
   { sym:"COP",   name:"ConocoPhillips",     industry:"Energy"          },
   { sym:"OXY",   name:"Occidental",         industry:"Energy"          },
   { sym:"SLB",   name:"SLB (Schlumberger)", industry:"Energy"          },
+
+  // ── 工業/航太 ────────────────────────────────────────────
   { sym:"CAT",   name:"Caterpillar",        industry:"Industrials"     },
-  { sym:"BA",    name:"Boeing",             industry:"Aerospace"       },
-  { sym:"RTX",   name:"Raytheon",           industry:"Aerospace"       },
   { sym:"HON",   name:"Honeywell",          industry:"Industrials"     },
   { sym:"GE",    name:"GE Aerospace",       industry:"Industrials"     },
+  { sym:"RTX",   name:"Raytheon",           industry:"Aerospace"       },
   { sym:"LMT",   name:"Lockheed Martin",    industry:"Aerospace"       },
-  { sym:"NOC",   name:"Northrop Grumman",   industry:"Aerospace"       },
+  { sym:"BA",    name:"Boeing",             industry:"Aerospace"       },
   { sym:"UPS",   name:"UPS",                industry:"Logistics"       },
   { sym:"FDX",   name:"FedEx",              industry:"Logistics"       },
   { sym:"DE",    name:"Deere & Company",    industry:"Industrials"     },
+  { sym:"MMM",   name:"3M",                 industry:"Industrials"     },
   { sym:"EMR",   name:"Emerson Electric",   industry:"Industrials"     },
+  { sym:"NOC",   name:"Northrop Grumman",   industry:"Aerospace"       },
 
   // ── REITs/公用事業 ───────────────────────────────────────
   { sym:"NEE",   name:"NextEra Energy",     industry:"Utilities"       },
   { sym:"DUK",   name:"Duke Energy",        industry:"Utilities"       },
   { sym:"SO",    name:"Southern Company",   industry:"Utilities"       },
-  { sym:"D",     name:"Dominion Energy",    industry:"Utilities"       },
   { sym:"AMT",   name:"American Tower",     industry:"REITs"           },
   { sym:"PLD",   name:"Prologis",           industry:"REITs"           },
   { sym:"CCI",   name:"Crown Castle",       industry:"REITs"           },
