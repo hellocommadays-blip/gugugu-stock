@@ -770,8 +770,84 @@ function ScreenerPage({ onSelectStock }) {
     } else if (market === "US") {
       runForeign(SCREENER_US_DEDUP, "US");
     } else {
-      runForeign(SCREENER_JP, "JP");
+      runJP();
     }
+  }
+
+  // ── 日股選股（J-Quants，東証代號）───────────────────────
+  async function runJP() {
+    setLoading(true); setRan(true);
+    setScanProgress({ done:0, total:SCREENER_JP.length });
+    setScanLog("連接 J-Quants API...");
+
+    const BATCH    = 3;
+    const DELAY_MS = 800;
+    const collected = [];
+
+    for (let i = 0; i < SCREENER_JP.length; i += BATCH) {
+      const batch = SCREENER_JP.slice(i, i + BATCH);
+      setScanLog(`掃描：${batch.map(s=>s.name).join("、")}`);
+
+      const batchResults = await Promise.all(batch.map(async (s) => {
+        try {
+          const safeFetch = async (url) => {
+            try {
+              const controller = new AbortController();
+              const timer = setTimeout(() => controller.abort(), 9000);
+              const r = await fetch(url, { signal: controller.signal });
+              clearTimeout(timer);
+              if (!r.ok) return null;
+              return r.json().catch(() => null);
+            } catch (_) { return null; }
+          };
+          const [priceRes, finRes] = await Promise.all([
+            safeFetch(`/api/jquants?type=price&code=${s.code}`),
+            safeFetch(`/api/jquants?type=financials&code=${s.code}`),
+          ]);
+          if (!priceRes?.success) return null;
+          const q   = priceRes.data;
+          const fin = finRes?.success ? finRes.data : null;
+
+          const adjustedROE            = fin?.adjustedROE            || null;
+          const adjustedEquityPerShare = fin?.adjustedEquityPerShare || null;
+          const bm  = (adjustedEquityPerShare && adjustedROE)
+            ? adjustedEquityPerShare * (adjustedROE / 100) * 10
+            : null;
+          const zoneInfo = bm ? calcZone(q.price, bm) : null;
+
+          return {
+            symbol:    s.code,
+            name:      s.name,
+            industry:  s.industry || "—",
+            market:    "JP",
+            price:     q.price,
+            changePct: q.changePct,
+            pe:        null,
+            pb:        null,
+            divYield:  null,
+            adjustedROE,
+            adjustedEquityPerShare,
+            bm,
+            zone:  zoneInfo?.zone  || "—",
+            ratio: zoneInfo?.ratio || null,
+          };
+        } catch(_) { return null; }
+      }));
+
+      batchResults.forEach(r => r && collected.push(r));
+      setScanProgress(p => ({ ...p, done: Math.min(i + BATCH, SCREENER_JP.length) }));
+
+      const sorted = sortItems([...collected], sortBy);
+      setAllResults([...collected]);
+      setResults(selectedZone === "全部" ? sorted : sorted.filter(s=>s.zone===selectedZone));
+
+      if (i + BATCH < SCREENER_JP.length) {
+        await new Promise(r => setTimeout(r, DELAY_MS));
+      }
+    }
+
+    setScanLog("");
+    setLoading(false);
   }
 
   function sortItems(data, sort) {
@@ -806,7 +882,7 @@ function ScreenerPage({ onSelectStock }) {
     : 0;
 
   // 市場對應的貨幣符號
-  const mktCS = { TW:"NT$", US:"$", JP:"$" }; // ADR 皆 USD
+  const mktCS = { TW:"NT$", US:"$", JP:"¥" };
   const cs = mktCS[market];
 
   return (
@@ -897,7 +973,7 @@ function ScreenerPage({ onSelectStock }) {
             </span>
             <div style={{ fontSize:11, color:C.faint, display:"flex", gap:8, alignItems:"center" }}>
               {dataDate && <span>資料日期：{dataDate}</span>}
-              {market !== "TW" && <span>⚠️ ADR 估值僅供相對比較</span>}
+              {market === "US" && <span>⚠️ 估值基準值為近似值</span>}
               {market === "TW" && <span>⚠️ 基準值為近似值</span>}
             </div>
           </div>
