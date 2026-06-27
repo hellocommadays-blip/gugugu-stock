@@ -262,6 +262,7 @@ export const SCREENER_US = [
   { sym:"MRVL",  name:"Marvell Tech",       industry:"Semiconductors"  },
   { sym:"ON",    name:"ON Semiconductor",   industry:"Semiconductors"  },
   { sym:"TXN",   name:"Texas Instruments",  industry:"Semiconductors"  },
+  { sym:"ARM",   name:"Arm Holdings",       industry:"Semiconductors"  },
   { sym:"CRM",   name:"Salesforce",         industry:"Technology"      },
   { sym:"ORCL",  name:"Oracle",             industry:"Technology"      },
   { sym:"IBM",   name:"IBM",                industry:"Technology"      },
@@ -281,7 +282,6 @@ export const SCREENER_US = [
   { sym:"NET",   name:"Cloudflare",         industry:"Technology"      },
   { sym:"OKTA",  name:"Okta",               industry:"Technology"      },
   { sym:"APP",   name:"AppLovin",           industry:"Technology"      },
-  { sym:"ARM",   name:"Arm Holdings",       industry:"Semiconductors"  },
   { sym:"SMCI",  name:"Super Micro",        industry:"Technology"      },
   { sym:"DELL",  name:"Dell Technologies",  industry:"Technology"      },
   { sym:"HPQ",   name:"HP Inc.",            industry:"Technology"      },
@@ -306,7 +306,6 @@ export const SCREENER_US = [
   { sym:"COIN",  name:"Coinbase",           industry:"Fintech"         },
 
   // ── 消費/零售 ────────────────────────────────────────────
-  { sym:"AMZN",  name:"Amazon",             industry:"E-Commerce"      },
   { sym:"WMT",   name:"Walmart",            industry:"Retail"          },
   { sym:"COST",  name:"Costco",             industry:"Retail"          },
   { sym:"TGT",   name:"Target",             industry:"Retail"          },
@@ -320,7 +319,6 @@ export const SCREENER_US = [
   { sym:"KO",    name:"Coca-Cola",          industry:"Beverages"       },
   { sym:"PEP",   name:"PepsiCo",            industry:"Beverages"       },
   { sym:"DIS",   name:"Disney",             industry:"Entertainment"   },
-  { sym:"NFLX",  name:"Netflix",            industry:"Entertainment"   },
   { sym:"SPOT",  name:"Spotify",            industry:"Entertainment"   },
   { sym:"EBAY",  name:"eBay",               industry:"E-Commerce"      },
   { sym:"ETSY",  name:"Etsy",               industry:"E-Commerce"      },
@@ -349,8 +347,6 @@ export const SCREENER_US = [
   { sym:"COP",   name:"ConocoPhillips",     industry:"Energy"          },
   { sym:"OXY",   name:"Occidental",         industry:"Energy"          },
   { sym:"SLB",   name:"SLB (Schlumberger)", industry:"Energy"          },
-
-  // ── 工業/航太 ────────────────────────────────────────────
   { sym:"CAT",   name:"Caterpillar",        industry:"Industrials"     },
   { sym:"HON",   name:"Honeywell",          industry:"Industrials"     },
   { sym:"GE",    name:"GE Aerospace",       industry:"Industrials"     },
@@ -361,19 +357,11 @@ export const SCREENER_US = [
   { sym:"FDX",   name:"FedEx",              industry:"Logistics"       },
   { sym:"DE",    name:"Deere & Company",    industry:"Industrials"     },
   { sym:"MMM",   name:"3M",                 industry:"Industrials"     },
-  { sym:"EMR",   name:"Emerson Electric",   industry:"Industrials"     },
-  { sym:"NOC",   name:"Northrop Grumman",   industry:"Aerospace"       },
-
-  // ── REITs/公用事業 ───────────────────────────────────────
   { sym:"NEE",   name:"NextEra Energy",     industry:"Utilities"       },
-  { sym:"DUK",   name:"Duke Energy",        industry:"Utilities"       },
-  { sym:"SO",    name:"Southern Company",   industry:"Utilities"       },
   { sym:"AMT",   name:"American Tower",     industry:"REITs"           },
   { sym:"PLD",   name:"Prologis",           industry:"REITs"           },
-  { sym:"CCI",   name:"Crown Castle",       industry:"REITs"           },
   { sym:"EQIX",  name:"Equinix",            industry:"REITs"           },
-];
-
+]
 // 去重（AMZN/NFLX 在兩個分類都出現）
 export const SCREENER_US_DEDUP = SCREENER_US.filter(
   (s, i, arr) => arr.findIndex(x => x.sym === s.sym) === i
