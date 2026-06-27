@@ -388,12 +388,9 @@ export const SCREENER_US = [
 ];
 
 // 去重（AMZN/NFLX 在兩個分類都出現）
-const _seenUS = new Set();
-export const SCREENER_US_DEDUP = SCREENER_US.filter(s => {
-  if (_seenUS.has(s.sym)) return false;
-  _seenUS.add(s.sym);
-  return true;
-});
+export const SCREENER_US_DEDUP = SCREENER_US.filter(
+  (s, i, arr) => arr.findIndex(x => x.sym === s.sym) === i
+);
 
 // ============================================================
 // 選股用靜態清單（日股 ADR — 日經225 主要成分的 ADR）
