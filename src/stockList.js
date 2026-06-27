@@ -290,13 +290,75 @@ export const SCREENER_US_DEDUP = SCREENER_US.filter(
 // 共約 35 檔，用 Finnhub 美股報價
 // ============================================================
 export const SCREENER_JP = [
-  // ── 日股 ADR（Finnhub 實測支援）────────────────────
-  { sym:"TM", name:"Toyota / トヨタ",                industry:"自動車" },
-  { sym:"HMC", name:"Honda / ホンダ",                 industry:"自動車" },
-  { sym:"SONY", name:"Sony / ソニー",                  industry:"電機" },
-  { sym:"MUFG", name:"三菱UFJ / MUFG",                industry:"金融" },
-  { sym:"SMFG", name:"三井住友 / SMFG",                 industry:"金融" },
-  { sym:"MFG", name:"みずほ / Mizuho",                industry:"金融" },
-  { sym:"NTDOY", name:"Nintendo / 任天堂",              industry:"ゲーム" },
-  { sym:"SFTBY", name:"SoftBank / ソフトバンク",           industry:"通信" },
+  // ── 自動車 ──────────────────────────────────────────────
+  { code:"7203", name:"トヨタ自動車",       industry:"自動車" },
+  { code:"7267", name:"本田技研工業",       industry:"自動車" },
+  { code:"7269", name:"スズキ",             industry:"自動車" },
+  { code:"7270", name:"SUBARU",             industry:"自動車" },
+  { code:"7201", name:"日産自動車",         industry:"自動車" },
+  { code:"7261", name:"マツダ",             industry:"自動車" },
+  { code:"7272", name:"ヤマハ発動機",       industry:"自動車" },
+
+  // ── 電機/電子 ────────────────────────────────────────────
+  { code:"6758", name:"ソニーグループ",     industry:"電機" },
+  { code:"6501", name:"日立製作所",         industry:"電機" },
+  { code:"6702", name:"富士通",             industry:"電機" },
+  { code:"6752", name:"パナソニック",       industry:"電機" },
+  { code:"6764", name:"三洋電機",           industry:"電機" },
+  { code:"6971", name:"京セラ",             industry:"電機" },
+  { code:"6594", name:"ニデック",           industry:"電機" },
+  { code:"6645", name:"オムロン",           industry:"電機" },
+
+  // ── 半導体/精密機器 ──────────────────────────────────────
+  { code:"8035", name:"東京エレクトロン",   industry:"半導体" },
+  { code:"6857", name:"アドバンテスト",     industry:"半導体" },
+  { code:"6723", name:"ルネサスエレクトロニクス", industry:"半導体" },
+  { code:"6981", name:"村田製作所",         industry:"電子部品" },
+  { code:"6762", name:"TDK",               industry:"電子部品" },
+  { code:"6770", name:"アルプスアルパイン", industry:"電子部品" },
+  { code:"7735", name:"大日本スクリーン",   industry:"精密機器" },
+  { code:"6954", name:"ファナック",         industry:"精密機器" },
+
+  // ── 通信/IT ──────────────────────────────────────────────
+  { code:"9984", name:"ソフトバンクグループ", industry:"通信" },
+  { code:"9432", name:"日本電信電話",       industry:"通信" },
+  { code:"9433", name:"KDDI",              industry:"通信" },
+  { code:"9434", name:"ソフトバンク",       industry:"通信" },
+  { code:"4689", name:"LINEヤフー",        industry:"IT" },
+
+  // ── 金融 ────────────────────────────────────────────────
+  { code:"8306", name:"三菱UFJフィナンシャル・グループ", industry:"銀行" },
+  { code:"8316", name:"三井住友フィナンシャルグループ",  industry:"銀行" },
+  { code:"8411", name:"みずほフィナンシャルグループ",    industry:"銀行" },
+  { code:"8591", name:"オリックス",         industry:"金融" },
+  { code:"8058", name:"三菱商事",           industry:"商社" },
+  { code:"8031", name:"三井物産",           industry:"商社" },
+  { code:"8001", name:"伊藤忠商事",         industry:"商社" },
+
+  // ── 素材/化学 ────────────────────────────────────────────
+  { code:"4063", name:"信越化学工業",       industry:"化学" },
+  { code:"4188", name:"三菱ケミカルグループ", industry:"化学" },
+  { code:"4911", name:"資生堂",             industry:"化学" },
+  { code:"4507", name:"塩野義製薬",         industry:"医薬品" },
+  { code:"4519", name:"中外製薬",           industry:"医薬品" },
+  { code:"4568", name:"第一三共",           industry:"医薬品" },
+
+  // ── 食品/消費 ────────────────────────────────────────────
+  { code:"2914", name:"日本たばこ産業",     industry:"食品" },
+  { code:"2502", name:"アサヒグループ",     industry:"食品・飲料" },
+  { code:"2503", name:"キリンホールディングス", industry:"食品・飲料" },
+  { code:"2801", name:"キッコーマン",       industry:"食品" },
+
+  // ── 小売/サービス ────────────────────────────────────────
+  { code:"3382", name:"セブン＆アイ・ホールディングス", industry:"小売" },
+  { code:"8267", name:"イオン",             industry:"小売" },
+  { code:"9983", name:"ファーストリテイリング", industry:"小売" },
+  { code:"7974", name:"任天堂",             industry:"ゲーム" },
+
+  // ── 機械/建設 ────────────────────────────────────────────
+  { code:"6326", name:"クボタ",             industry:"機械" },
+  { code:"6301", name:"小松製作所",         industry:"機械" },
+  { code:"7011", name:"三菱重工業",         industry:"重工業" },
+  { code:"1925", name:"大和ハウス工業",     industry:"建設" },
+  { code:"1928", name:"積水ハウス",         industry:"建設" },
 ];
