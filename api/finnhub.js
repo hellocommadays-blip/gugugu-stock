@@ -48,13 +48,12 @@ export default async function handler(req, res) {
           const quote   = await quoteRes.json();
           const profile = await profileRes.json();
 
-          if (!quote?.c || quote.c === 0) {
+          const price     = quote.c || quote.pc || 0;
+          const prevClose = quote.pc || quote.c || 0;
+          if (!price) {
             res.status(404).json({ error: `找不到日股ADR「${symbol}」，請使用ADR代號（TM=Toyota、SONY=Sony、HMC=Honda）` });
             return;
           }
-
-          const price     = quote.c;
-          const prevClose = quote.pc;
 
           res.status(200).json({
             success: true,
@@ -86,13 +85,12 @@ export default async function handler(req, res) {
         const quote   = await quoteRes.json();
         const profile = await profileRes.json();
 
-        if (!quote?.c || quote.c === 0) {
+        const price     = quote.c || quote.pc || 0;
+        const prevClose = quote.pc || quote.c || 0;
+        if (!price) {
           res.status(404).json({ error: `找不到 ${symbol}，請確認代號` });
           return;
         }
-
-        const price     = quote.c;
-        const prevClose = quote.pc;
 
         res.status(200).json({
           success: true,
