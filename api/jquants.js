@@ -6,7 +6,7 @@ const BASE    = 'https://api.jquants.com/v2';
 
 async function jFetch(path) {
   const r = await fetch(`${BASE}${path}`, {
-    headers: { 'Authorization': `Bearer ${API_KEY}` },
+    headers: { 'x-api-key': API_KEY },
   });
   if (!r.ok) {
     const text = await r.text();
