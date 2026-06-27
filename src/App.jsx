@@ -709,18 +709,17 @@ function ScreenerPage({ onSelectStock }) {
               return r.json().catch(() => null);
             } catch (_) { return null; }
           };
-          // quote: Finnhub（快）；financials: Yahoo（覆蓋率廣）
-          // 日股ADR market=JP，Yahoo 也用 US 查（ADR 在美掛牌）
+          // quote + financials 全用 Yahoo（覆蓋率 100%，美日股全支援）
+          // 日股ADR 在美掛牌，Yahoo 用 US 查
           const yahooMkt = mkt === 'JP' ? 'US' : mkt;
           const [quoteRes, finRes] = await Promise.all([
-            safeFetch(`/api/finnhub?symbol=${s.sym}&market=${mkt}&type=quote`),
+            safeFetch(`/api/yahoo?symbol=${s.sym}&market=${yahooMkt}&type=quote`),
             safeFetch(`/api/yahoo?symbol=${s.sym}&market=${yahooMkt}&type=financials`),
           ]);
           if (!quoteRes?.success) return null;
           const q   = quoteRes.data;
           const fin = finRes?.success ? finRes.data : null;
 
-          // Yahoo 回傳 adjustedROE 和 adjustedEquityPerShare
           const adjustedROE            = fin?.adjustedROE            || fin?.roe            || null;
           const adjustedEquityPerShare = fin?.adjustedEquityPerShare || fin?.bookValue      || null;
           const bm  = (adjustedEquityPerShare && adjustedROE)
