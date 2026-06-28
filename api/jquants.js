@@ -1,5 +1,5 @@
 // api/jquants.js — 日股 J-Quants V2 proxy
-// 2025/12/22 以後新用戶使用 V2 API Key 認證
+// V2 API：x-api-key 認證 + 新 endpoint 路徑
 
 const API_KEY = process.env.JQUANTS_API_KEY;
 const BASE    = 'https://api.jquants.com/v2';
@@ -15,7 +15,6 @@ async function jFetch(path) {
   return r.json();
 }
 
-// 日本時間（UTC+9）の日付
 function getJPDate(offsetDays = 0) {
   const d = new Date();
   d.setHours(d.getHours() + 9);
@@ -23,7 +22,6 @@ function getJPDate(offsetDays = 0) {
   return d.toISOString().slice(0, 10).replace(/-/g, '');
 }
 
-// 最近の営業日（週末スキップ）
 function getRecentTradingDates(count = 7) {
   const dates = [];
   let d = new Date();
@@ -55,6 +53,7 @@ export default async function handler(req, res) {
     switch (type) {
 
       // ── 報價（最近交易日）────────────────────────────────
+      // V2 endpoint: /equities/bars/daily
       case 'price': {
         if (!code) { res.status(400).json({ error: 'code 必填' }); return; }
 
@@ -63,8 +62,8 @@ export default async function handler(req, res) {
 
         for (const date of dates) {
           try {
-            const data = await jFetch(`/prices/daily_quotes?code=${code}&date=${date}`);
-            const items = data?.daily_quotes ?? data?.data;
+            const data = await jFetch(`/equities/bars/daily?code=${code}&date=${date}`);
+            const items = data?.daily_quotes ?? data?.bars ?? data?.data;
             if (items?.length > 0) {
               q = items[0];
               usedDate = date;
@@ -91,17 +90,17 @@ export default async function handler(req, res) {
       }
 
       // ── 財務資料 ─────────────────────────────────────────
+      // V2 endpoint: /fins/summary
       case 'financials': {
         if (!code) { res.status(400).json({ error: 'code 必填' }); return; }
 
-        const data  = await jFetch(`/fins/statements?code=${code}`);
-        const stmts = data?.statements ?? data?.data ?? [];
+        const data  = await jFetch(`/fins/summary?code=${code}`);
+        const stmts = data?.summary ?? data?.statements ?? data?.data ?? [];
         if (!stmts.length) {
           res.status(200).json({ success: true, data: null, note: '無財務資料' });
           return;
         }
 
-        // 最新年報
         const annual = stmts
           .filter(s => (s.TypeOfDocument ?? '').includes('Annual') || (s.TypeOfDocument ?? '').includes('FY'))
           .sort((a, b) => (b.CurrentPeriodEndDate ?? '').localeCompare(a.CurrentPeriodEndDate ?? ''))[0]
@@ -122,13 +121,14 @@ export default async function handler(req, res) {
       }
 
       // ── 歷史走勢（近60日）────────────────────────────────
+      // V2 endpoint: /equities/bars/daily
       case 'history': {
         if (!code) { res.status(400).json({ error: 'code 必填' }); return; }
 
         const to   = getJPDate(0);
         const from = getJPDate(-90);
-        const data = await jFetch(`/prices/daily_quotes?code=${code}&from=${from}&to=${to}`);
-        const quotes = (data?.daily_quotes ?? data?.data ?? []).filter(q => q.Close);
+        const data = await jFetch(`/equities/bars/daily?code=${code}&from=${from}&to=${to}`);
+        const quotes = (data?.daily_quotes ?? data?.bars ?? data?.data ?? []).filter(q => q.Close);
 
         const history = quotes.slice(-60).map(q => {
           const dateStr = String(q.Date);
@@ -141,9 +141,10 @@ export default async function handler(req, res) {
       }
 
       // ── 上市清單 ─────────────────────────────────────────
+      // V2 endpoint: /equities/master
       case 'listed': {
-        const data  = await jFetch('/listed/info');
-        const items = data?.info ?? data?.data ?? [];
+        const data  = await jFetch('/equities/master');
+        const items = data?.master ?? data?.info ?? data?.data ?? [];
         const listed = items.map(i => ({
           code: i.Code, name: i.CompanyName, nameEn: i.CompanyNameEnglish ?? '',
           industry: i.Sector33CodeName ?? '', market: i.MarketCodeName ?? '',
