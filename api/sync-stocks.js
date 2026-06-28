@@ -71,9 +71,7 @@ const US_STOCKS = [
   { sym:"KO",    name:"Coca-Cola",          industry:"Beverages"      },
   { sym:"PEP",   name:"PepsiCo",            industry:"Beverages"      },
   { sym:"DIS",   name:"Disney",             industry:"Entertainment"  },
-  { sym:"NFLX",  name:"Netflix",            industry:"Entertainment"  },
   { sym:"SPOT",  name:"Spotify",            industry:"Entertainment"  },
-  { sym:"AMZN",  name:"Amazon",             industry:"E-Commerce"     },
   // ── 醫療/生技 ───────────────────────────────────────────────
   { sym:"JNJ",   name:"Johnson & Johnson",  industry:"Healthcare"     },
   { sym:"PFE",   name:"Pfizer",             industry:"Pharma"         },
@@ -102,7 +100,6 @@ const US_STOCKS = [
   { sym:"FDX",   name:"FedEx",              industry:"Logistics"      },
   { sym:"NEE",   name:"NextEra Energy",     industry:"Utilities"      },
   { sym:"AMT",   name:"American Tower",     industry:"REITs"          },
-  { sym:"PLD",   name:"Prologis",           industry:"REITs"          },
   // ── 科技（擴充）────────────────────────────────────────────
   { sym:"NOW",   name:"ServiceNow",         industry:"Technology"     },
   { sym:"PLTR",  name:"Palantir",           industry:"Technology"     },
