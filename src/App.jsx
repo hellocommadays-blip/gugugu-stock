@@ -768,7 +768,62 @@ function ScreenerPage({ onSelectStock }) {
     if (market === "TW") {
       runTW();
     } else {
+      runUS();
+    }
+  }
+
+  // ── 美股選股：從 Supabase stocks_cache 讀取 ─────────────
+  async function runUS() {
+    setLoading(true); setRan(true); setScanLog("");
+    try {
+      const { data, error } = await supabase
+        .from('stocks_cache')
+        .select('*')
+        .eq('market', 'US')
+        .order('symbol');
+
+      if (error) throw new Error(error.message);
+      if (!data?.length) {
+        // 沒有快取資料時，fallback 到即時抓取
+        setScanLog("資料庫無快取，改為即時掃描...");
+        setLoading(false);
+        runForeign(SCREENER_US_DEDUP, "US");
+        return;
+      }
+
+      // 把 Supabase 欄位名轉成前端格式
+      const mapped = data.map(s => ({
+        symbol:    s.symbol,
+        name:      s.name,
+        industry:  s.industry || "—",
+        market:    'US',
+        price:     s.price,
+        changePct: s.change_pct,
+        pe:        s.pe,
+        pb:        s.pb,
+        divYield:  s.div_yield,
+        adjustedROE:            s.roe,
+        adjustedEquityPerShare: s.bps,
+        bm:        s.bm,
+        zone:      s.zone || "—",
+        ratio:     s.ratio,
+      }));
+
+      // 取得更新時間
+      if (data[0]?.updated_at) {
+        const d = new Date(data[0].updated_at);
+        d.setHours(d.getHours() + 8);
+        setDataDate(d.toISOString().slice(0,10).replace(/-/g,'/'));
+      }
+
+      setAllResults(mapped);
+      filterAndSort(mapped, selectedZone, sortBy);
+    } catch (err) {
+      console.error('runUS error:', err);
+      setScanLog("讀取失敗，改為即時掃描...");
       runForeign(SCREENER_US_DEDUP, "US");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -864,7 +919,7 @@ function ScreenerPage({ onSelectStock }) {
         <button onClick={run} disabled={loading}
           style={{ width:"100%", padding:"12px", borderRadius:12, border:"none", background:`linear-gradient(135deg,${C.accentDark},${C.accent})`, color:"#fff", fontWeight:700, fontSize:15, cursor:"pointer", opacity:loading?0.7:1 }}>
           {loading
-            ? (market==="TW" ? "掃描台股中⋯" : `掃描中 ${scanProgress.done}/${scanProgress.total}（${scanPct}%）`)
+            ? (market==="TW" ? "掃描台股中⋯" : "載入中⋯")
             : `執行選股 · ${market==="TW"?"台股上市":"美股S&P500+"}`
           }
         </button>
