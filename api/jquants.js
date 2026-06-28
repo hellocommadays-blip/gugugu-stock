@@ -153,6 +153,16 @@ export default async function handler(req, res) {
         return;
       }
 
+      // ── Debug：看原始欄位 ──────────────────────────────────
+      case 'debug': {
+        const data = await jFetch('/equities/master');
+        const items = data?.master ?? data?.info ?? data?.data ?? [];
+        // 回傳第一筆的 raw keys
+        const first = items[0] ?? {};
+        res.status(200).json({ keys: Object.keys(first), sample: first });
+        return;
+      }
+
       default:
         res.status(400).json({ error: `未知 type: ${type}` });
     }
