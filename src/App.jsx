@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { createClient } from "@supabase/supabase-js";
-import { STOCK_LIST, SCREENER_US_DEDUP, SCREENER_JP } from "./stockList.js";
+import { STOCK_LIST, SCREENER_US_DEDUP } from "./stockList.js";
 
 // ============================================================
 // Supabase 客戶端
@@ -778,87 +778,56 @@ function ScreenerPage({ onSelectStock }) {
     setSelectedZone("全部");
     if (market === "TW") {
       runTW();
-    } else if (market === "US") {
-      runForeign(SCREENER_US_DEDUP, "US");
     } else {
-      runJP();
+      runUS();
     }
   }
 
-  // ── 日股選股（J-Quants，東証代號）───────────────────────
-  async function runJP() {
-    setLoading(true); setRan(true);
-    setScanProgress({ done:0, total:SCREENER_JP.length });
-    setScanLog("連接 J-Quants API...");
-
-    const BATCH    = 3;
-    const DELAY_MS = 800;
-    const collected = [];
-
-    for (let i = 0; i < SCREENER_JP.length; i += BATCH) {
-      const batch = SCREENER_JP.slice(i, i + BATCH);
-      setScanLog(`掃描：${batch.map(s=>s.name).join("、")}`);
-
-      const batchResults = await Promise.all(batch.map(async (s) => {
-        try {
-          const safeFetch = async (url) => {
-            try {
-              const controller = new AbortController();
-              const timer = setTimeout(() => controller.abort(), 9000);
-              const r = await fetch(url, { signal: controller.signal });
-              clearTimeout(timer);
-              if (!r.ok) return null;
-              return r.json().catch(() => null);
-            } catch (_) { return null; }
-          };
-          const [priceRes, finRes] = await Promise.all([
-            safeFetch(`/api/jquants?type=price&code=${s.code}`),
-            safeFetch(`/api/jquants?type=financials&code=${s.code}`),
-          ]);
-          if (!priceRes?.success) return null;
-          const q   = priceRes.data;
-          const fin = finRes?.success ? finRes.data : null;
-
-          const adjustedROE            = fin?.adjustedROE            || null;
-          const adjustedEquityPerShare = fin?.adjustedEquityPerShare || null;
-          const bm  = (adjustedEquityPerShare && adjustedROE)
-            ? adjustedEquityPerShare * (adjustedROE / 100) * 10
-            : null;
-          const zoneInfo = bm ? calcZone(q.price, bm) : null;
-
-          return {
-            symbol:    s.code,
-            name:      s.name,
-            industry:  s.industry || "—",
-            market:    "JP",
-            price:     q.price,
-            changePct: q.changePct,
-            pe:        null,
-            pb:        null,
-            divYield:  null,
-            adjustedROE,
-            adjustedEquityPerShare,
-            bm,
-            zone:  zoneInfo?.zone  || "—",
-            ratio: zoneInfo?.ratio || null,
-          };
-        } catch(_) { return null; }
-      }));
-
-      batchResults.forEach(r => r && collected.push(r));
-      setScanProgress(p => ({ ...p, done: Math.min(i + BATCH, SCREENER_JP.length) }));
-
-      const sorted = sortItems([...collected], sortBy);
-      setAllResults([...collected]);
-      setResults(selectedZone === "全部" ? sorted : sorted.filter(s=>s.zone===selectedZone));
-
-      if (i + BATCH < SCREENER_JP.length) {
-        await new Promise(r => setTimeout(r, DELAY_MS));
+  // ── 美股選股：從 Supabase stocks_cache 讀取 ─────────────
+  async function runUS() {
+    setLoading(true); setRan(true); setScanLog("");
+    try {
+      const { data, error } = await supabase
+        .from('stocks_cache')
+        .select('*')
+        .eq('market', 'US')
+        .order('symbol');
+      if (error) throw new Error(error.message);
+      if (!data?.length) {
+        setScanLog("資料庫無快取，改為即時掃描...");
+        setLoading(false);
+        runForeign(SCREENER_US_DEDUP, "US");
+        return;
       }
+      const mapped = data.map(s => ({
+        symbol:    s.symbol,
+        name:      s.name,
+        industry:  s.industry || "—",
+        market:    'US',
+        price:     s.price,
+        changePct: s.change_pct,
+        pe:        s.pe,
+        pb:        s.pb,
+        divYield:  s.div_yield,
+        adjustedROE:            s.roe,
+        adjustedEquityPerShare: s.bps,
+        bm:        s.bm,
+        zone:      s.zone || "—",
+        ratio:     s.ratio,
+      }));
+      if (data[0]?.updated_at) {
+        const d = new Date(data[0].updated_at);
+        d.setHours(d.getHours() + 8);
+        setDataDate(d.toISOString().slice(0,10).replace(/-/g,'/'));
+      }
+      setAllResults(mapped);
+      filterAndSort(mapped, selectedZone, sortBy);
+    } catch (err) {
+      setScanLog("讀取失敗，改為即時掃描...");
+      runForeign(SCREENER_US_DEDUP, "US");
+    } finally {
+      setLoading(false);
     }
-
-    setScanLog("");
-    setLoading(false);
   }
 
   function sortItems(data, sort) {
@@ -903,7 +872,7 @@ function ScreenerPage({ onSelectStock }) {
         <div style={{ marginBottom:16 }}>
           <SectionLabel>選擇市場</SectionLabel>
           <div style={{ display:"flex", gap:8 }}>
-            {[["TW","🇹🇼 台股"],["US","🇺🇸 美股"],["JP","🇯🇵 日股ADR"]].map(([m, label]) => (
+            {[["TW","🇹🇼 台股"],["US","🇺🇸 美股"]].map(([m, label]) => (
               <button key={m} onClick={()=>switchMarket(m)}
                 style={{ flex:1, padding:"10px 8px", borderRadius:12, border:`2px solid ${market===m?C.accent:C.border}`, background:market===m?C.accent+"14":"transparent", color:market===m?C.accent:C.muted, fontWeight:market===m?700:400, fontSize:13, cursor:"pointer" }}>
                 {label}
@@ -913,8 +882,8 @@ function ScreenerPage({ onSelectStock }) {
           {market !== "TW" && (
             <div style={{ fontSize:11, color:C.faint, marginTop:8, lineHeight:1.6 }}>
               {market === "US"
-                ? `⚡ 掃描 ${SCREENER_US_DEDUP.length} 檔美股（S&P 500核心 + 熱門科技）。Finnhub 免費版有速率限制，約需 ${Math.ceil(SCREENER_US_DEDUP.length/4)*1}–${Math.ceil(SCREENER_US_DEDUP.length/4)*1+1} 分鐘，掃描中可即時看到已完成的結果。`
-                : `⚡ 掃描 ${SCREENER_JP.length} 檔日股ADR（日經225主要成分）。ADR 以美元計價，估值基準值為美元數字，供相對比較用。`
+                ? `⚡ 美股資料每日自動更新，共 ${allResults.length > 0 ? allResults.length : "100+"} 檔，即點即看。`
+                : null
               }
             </div>
           )}
@@ -953,8 +922,8 @@ function ScreenerPage({ onSelectStock }) {
         <button onClick={run} disabled={loading}
           style={{ width:"100%", padding:"12px", borderRadius:12, border:"none", background:`linear-gradient(135deg,${C.accentDark},${C.accent})`, color:"#fff", fontWeight:700, fontSize:15, cursor:"pointer", opacity:loading?0.7:1 }}>
           {loading
-            ? (market==="TW" ? "掃描台股中⋯" : `掃描中 ${scanProgress.done}/${scanProgress.total}（${scanPct}%）`)
-            : `執行選股 · ${market==="TW"?"台股上市":market==="US"?"美股S&P500+":"日股ADR"}`
+            ? (market==="TW" ? "掃描台股中⋯" : "讀取中⋯")
+            : `執行選股 · ${market==="TW"?"台股上市":"美股精選"}`
           }
         </button>
 
