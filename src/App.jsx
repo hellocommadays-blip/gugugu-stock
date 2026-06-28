@@ -462,7 +462,7 @@ function StockPage({ initialQuery='', initialMarket=null, rates={}, onQueryUsed,
                 </div>
                 <div style={{ fontSize:34, fontWeight:900, color:C.navy, fontFamily:"monospace", letterSpacing:-1 }}>{cs}{fmt(stock.price)}</div>
                 {stock.market==='US' && rates?.USD?.sell && (
-                  <div style={{ fontSize:13, color:C.muted, marginTop:3 }}>≈ NT$ {fmt(stock.price * rates.USD.sell)}</div>
+                  <div style={{ fontSize:16, color:C.navy, marginTop:2, fontFamily:"monospace" }}>NT${fmt(stock.price * rates.USD.sell)}</div>
                 )}
                 <div style={{ fontSize:15, marginTop:4, color:stock.change>=0?C.up:C.down, fontWeight:600 }}>
                   {stock.change>=0?"▲":"▼"} {Math.abs(stock.change).toFixed(2)} ({fmtPct(stock.changePct)})
@@ -1003,7 +1003,7 @@ function ScreenerPage({ onSelectStock, user, rates={} }) {
                         <div style={{ fontSize:10, color:s.changePct>=0?C.up:C.down }}>{fmtPct(s.changePct)}</div>
                       )}
                       {s.market === 'US' && s.price && rates?.USD?.sell && (
-                        <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>≈ NT${fmt(s.price*rates.USD.sell)}</div>
+                        <div style={{ fontSize:13, color:C.navy, marginTop:2, fontFamily:"monospace" }}>NT${fmt(s.price*rates.USD.sell)}</div>
                       )}
                     </div>
                     <span style={{ fontSize:12, color:C.muted, textAlign:"right" }}>{s.pe ? fmt(s.pe,1) : "—"}</span>
@@ -1176,7 +1176,7 @@ function WatchlistPage({ user, rates={}, onSelectStock }) {
                     {p ? `${cs}${fmt(p.price)}` : "—"}
                   </div>
                   {market==='US' && p?.price && rates?.USD?.sell && (
-                    <div style={{ fontSize:13, color:C.muted, marginTop:2 }}>≈ NT${fmt(p.price*rates.USD.sell)}</div>
+                    <div style={{ fontSize:13, color:C.navy, marginTop:2, fontFamily:"monospace" }}>NT${fmt(p.price*rates.USD.sell)}</div>
                   )}
                 </div>
                 <span style={{ fontSize:12, textAlign:"right", color:p?.changePct>=0?C.up:C.down, fontFamily:"monospace" }}>
