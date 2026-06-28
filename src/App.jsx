@@ -636,7 +636,12 @@ function StockPage({ initialQuery='', initialMarket=null, onQueryUsed, onAddWatc
           <AIAnalysis stock={stock} bm={bm} zone={zone} />
 
           <div style={{ fontSize:12, color:C.muted, textAlign:"center", padding:"4px 0 12px" }}>
-            🕊️「股咕股」溫馨提示：本工具僅為個人開發之數據整合與指標分析統計，並非提供任何形式的投資買賣建議。市場有風險，投資需謹慎，「股咕股」只負責啼叫報時，盈虧請用戶自負。
+            <span className="desktop-notice">
+          🕊️「股咕股」溫馨提示：本工具僅為個人開發之數據整合與指標分析統計，<br/>並非提供任何形式的投資買賣建議。市場有風險，投資需謹慎，盈虧請用戶自負。
+        </span>
+        <span className="mobile-notice">
+          本工具僅供參考，不構成投資建議。<br/>市場有風險，盈虧請用戶自負。
+        </span>
           </div>
         </div>
       )}
@@ -965,9 +970,10 @@ function ScreenerPage({ onSelectStock }) {
           ) : (
             <div>
               {/* 表頭 */}
-              <div style={{ display:"grid", gridTemplateColumns:"72px 1fr 88px 56px 64px 76px", gap:6, padding:"8px 14px", background:C.surface2, fontSize:11, color:C.muted, fontWeight:600 }}>
+              <div style={{ display:"grid", gridTemplateColumns:"64px 1fr 80px 88px 52px 60px 72px", gap:6, padding:"8px 14px", background:C.surface2, fontSize:11, color:C.muted, fontWeight:600 }}>
                 <span>代號</span>
-                <span>名稱／產業</span>
+                <span>名稱</span>
+                <span>產業</span>
                 <span style={{ textAlign:"right" }}>現價</span>
                 <span style={{ textAlign:"right" }}>PE</span>
                 <span style={{ textAlign:"right" }}>殖利率</span>
@@ -979,16 +985,12 @@ function ScreenerPage({ onSelectStock }) {
                 return (
                   <div key={sym}
                     onClick={()=>onSelectStock&&onSelectStock(sym, s.market||market)}
-                    style={{ display:"grid", gridTemplateColumns:"72px 1fr 88px 56px 64px 76px", gap:6, padding:"10px 14px", borderBottom:`1px solid ${C.surface2}`, alignItems:"center", cursor:"pointer" }}
+                    style={{ display:"grid", gridTemplateColumns:"64px 1fr 80px 88px 52px 60px 72px", gap:6, padding:"10px 14px", borderBottom:`1px solid ${C.surface2}`, alignItems:"center", cursor:"pointer" }}
                     onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
                     onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                     <span style={{ fontSize:13, fontWeight:700, color:C.accent }}>{sym}</span>
-                    <div style={{ overflow:"hidden" }}>
-                      <div style={{ fontSize:12, color:C.navy, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                        {s.name}
-                        {s.industry && s.industry !== "—" && <span style={{ fontSize:11, color:C.muted, marginLeft:6 }}>{s.industry}</span>}
-                      </div>
-                    </div>
+                    <span style={{ fontSize:12, color:C.navy, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.name}</span>
+                    <span style={{ fontSize:11, color:C.muted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.industry||"—"}</span>
                     <span style={{ fontSize:13, fontWeight:600, color:C.navy, textAlign:"right", fontFamily:"monospace" }}>
                       {s.price ? `${displayCS}${fmt(s.price)}` : "—"}
                       {s.changePct != null && (
@@ -1489,7 +1491,7 @@ function PortfolioPage({ user }) {
             {expandedLots[h.symbol] && (
               <div style={{ marginTop:8 }}>
                 {/* 表頭 */}
-                <div style={{ display:"grid", gridTemplateColumns:"44px 1fr 60px 90px 80px", gap:6, padding:"4px 0", borderBottom:`1px solid ${C.border}`, fontSize:11, color:C.faint, fontWeight:600 }}>
+                <div style={{ display:"grid", gridTemplateColumns:"36px 100px 50px 100px 70px", gap:8, padding:"4px 0", borderBottom:`1px solid ${C.border}`, fontSize:11, color:C.faint, fontWeight:600 }}>
                   <span>批次</span><span>日期</span><span style={{textAlign:"right"}}>股數</span><span style={{textAlign:"right"}}>成本</span><span></span>
                 </div>
                 {h.lots.map((l,i)=>{
@@ -1515,7 +1517,7 @@ function PortfolioPage({ user }) {
                           </div>
                         </div>
                       ) : (
-                        <div style={{ display:"grid", gridTemplateColumns:"44px 1fr 60px 90px 80px", gap:6, padding:"7px 0", alignItems:"center", fontSize:12, color:C.muted }}>
+                        <div style={{ display:"grid", gridTemplateColumns:"36px 100px 50px 100px 70px", gap:8, padding:"7px 0", alignItems:"center", fontSize:12, color:C.muted }}>
                           <span style={{ fontWeight:600, color:C.navy }}>#{i+1}</span>
                           <span>{l.date}</span>
                           <span style={{ textAlign:"right" }}>{l.shares.toLocaleString()}</span>
@@ -1551,7 +1553,12 @@ function PortfolioPage({ user }) {
       ))}
 
       <div style={{ fontSize:12, color:C.muted, textAlign:"center", padding:"4px 0 16px" }}>
-        🕊️「股咕股」溫馨提示：本工具僅為個人開發之數據整合與指標分析統計，並非提供任何形式的投資買賣建議。市場有風險，投資需謹慎，「股咕股」只負責啼叫報時，盈虧請用戶自負。
+        <span className="desktop-notice">
+          🕊️「股咕股」溫馨提示：本工具僅為個人開發之數據整合與指標分析統計，<br/>並非提供任何形式的投資買賣建議。市場有風險，投資需謹慎，盈虧請用戶自負。
+        </span>
+        <span className="mobile-notice">
+          本工具僅供參考，不構成投資建議。<br/>市場有風險，盈虧請用戶自負。
+        </span>
       </div>
     </div>
   );
