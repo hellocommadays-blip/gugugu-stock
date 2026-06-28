@@ -973,7 +973,7 @@ function ScreenerPage({ onSelectStock, user, rates={} }) {
           ) : (
             <div>
               {/* 表頭 */}
-              <div style={{ display:"grid", gridTemplateColumns:"60px 1fr 72px 72px 44px 54px 70px", gap:6, padding:"8px 14px", background:C.surface2, fontSize:11, color:C.muted, fontWeight:600 }}>
+              <div style={{ display:"grid", gridTemplateColumns:"60px 1fr 80px 90px 44px 54px 70px", gap:10, padding:"8px 14px", background:C.surface2, fontSize:11, color:C.muted, fontWeight:600 }}>
                 <span>代號</span>
                 <span>名稱／產業</span>
                 <span style={{ textAlign:"right" }}>現價</span>
@@ -988,7 +988,7 @@ function ScreenerPage({ onSelectStock, user, rates={} }) {
                 return (
                   <div key={sym}
                     onClick={()=>onSelectStock&&onSelectStock(sym, s.market||market)}
-                    style={{ display:"grid", gridTemplateColumns:"60px 1fr 72px 72px 44px 54px 70px", gap:6, padding:"10px 14px", borderBottom:`1px solid ${C.surface2}`, alignItems:"center", cursor:"pointer" }}
+                    style={{ display:"grid", gridTemplateColumns:"60px 1fr 80px 90px 44px 54px 70px", gap:10, padding:"10px 14px", borderBottom:`1px solid ${C.surface2}`, alignItems:"center", cursor:"pointer" }}
                     onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
                     onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                     <span style={{ fontSize:13, fontWeight:700, color:C.accent }}>{sym}</span>
@@ -1155,7 +1155,7 @@ function WatchlistPage({ user, rates={}, onSelectStock }) {
         <Card><div style={{ textAlign:"center", padding:32, color:C.muted }}>還沒有自選股票，輸入代號開始新增</div></Card>
       ) : (
         <Card style={{ padding:0, overflow:"hidden" }}>
-          <div style={{ display:"grid", gridTemplateColumns:"80px 1fr 90px 90px 72px 44px", gap:8, padding:"8px 16px", background:C.surface2, fontSize:11, color:C.muted, fontWeight:600 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"80px 1fr 96px 104px 72px 44px", gap:12, padding:"8px 16px", background:C.surface2, fontSize:11, color:C.muted, fontWeight:600 }}>
             <span>代號</span><span>名稱／產業</span><span style={{ textAlign:"right" }}>現價</span><span style={{ textAlign:"right" }}>台幣</span><span style={{ textAlign:"right" }}>漲跌</span><span></span>
           </div>
           {list.map(item => {
@@ -1165,7 +1165,7 @@ function WatchlistPage({ user, rates={}, onSelectStock }) {
             const cs = market === "US" ? "$" : market === "JP" ? "¥" : "NT$";
             return (
               <div key={item.symbol}
-                style={{ display:"grid", gridTemplateColumns:"80px 1fr 90px 90px 72px 44px", gap:8, padding:"12px 16px", borderBottom:`1px solid ${C.surface2}`, alignItems:"center" }}
+                style={{ display:"grid", gridTemplateColumns:"80px 1fr 96px 104px 72px 44px", gap:12, padding:"12px 16px", borderBottom:`1px solid ${C.surface2}`, alignItems:"center" }}
                 onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
                 onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                 <span onClick={()=>onSelectStock&&onSelectStock(item.symbol)}
