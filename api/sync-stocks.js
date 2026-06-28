@@ -158,6 +158,9 @@ async function fetchWithTimeout(url, ms = 8000) {
 }
 
 export default async function handler(req, res) {
+  // 支援分批：?offset=0&limit=30
+  const offset = parseInt(req.query.offset || '0');
+  const limit  = parseInt(req.query.limit  || '30');
   res.setHeader('Access-Control-Allow-Origin', '*');
 
   if (!FINNHUB_KEY)  return res.status(500).json({ error: 'FINNHUB_API_KEY 未設定' });
@@ -171,11 +174,12 @@ export default async function handler(req, res) {
   const errors   = [];
 
   // 批次處理，每批 3 檔，間隔 1.2 秒（Finnhub 免費版 60 req/min）
-  const BATCH = 3;
-  const DELAY = 1200;
+  const BATCH = 2;
+  const DELAY = 2000;
 
-  for (let i = 0; i < US_STOCKS.length; i += BATCH) {
-    const batch = US_STOCKS.slice(i, i + BATCH);
+  const stockSlice = US_STOCKS.slice(offset, offset + limit);
+  for (let i = 0; i < stockSlice.length; i += BATCH) {
+    const batch = stockSlice.slice(i, i + BATCH);
 
     await Promise.all(batch.map(async (s) => {
       try {
@@ -189,8 +193,14 @@ export default async function handler(req, res) {
           return;
         }
 
-        const quote  = await qr.json();
-        const metric = await fr.json();
+        let quote, metric;
+        try {
+          quote  = await qr.json();
+          metric = await fr.json();
+        } catch (_) {
+          errors.push(`${s.sym}: invalid JSON (rate limited?)`);
+          return;
+        }
         const m      = metric?.metric || {};
 
         const price     = quote.c || quote.pc || 0;
@@ -225,7 +235,7 @@ export default async function handler(req, res) {
       }
     }));
 
-    if (i + BATCH < US_STOCKS.length) {
+    if (i + BATCH < stockSlice.length) {
       await new Promise(r => setTimeout(r, DELAY));
     }
   }
