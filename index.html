@@ -8,6 +8,12 @@
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       body { font-family: 'Inter', 'Noto Sans TC', -apple-system, sans-serif; }
+      .desktop-notice { display: inline; }
+      .mobile-notice  { display: none; }
+      @media (max-width: 640px) {
+        .desktop-notice { display: none; }
+        .mobile-notice  { display: inline; }
+      }
     </style>
   </head>
   <body>
