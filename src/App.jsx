@@ -879,7 +879,7 @@ function ScreenerPage({ onSelectStock }) {
           {market !== "TW" && (
             <div style={{ fontSize:11, color:C.faint, marginTop:8, lineHeight:1.6 }}>
               {market === "US"
-                ? `⚡ 掃描 ${SCREENER_US_DEDUP.length} 檔美股（S&P 500核心 + 熱門科技）。Finnhub 免費版有速率限制，約需 ${Math.ceil(SCREENER_US_DEDUP.length/4)*1}–${Math.ceil(SCREENER_US_DEDUP.length/4)*1+1} 分鐘，掃描中可即時看到已完成的結果。`
+                ? `⚡ 美股資料每日自動更新，共 ${allResults.length > 0 ? allResults.length : '100+'} 檔，即點即看。`
                 : null
               }
             </div>
@@ -919,7 +919,7 @@ function ScreenerPage({ onSelectStock }) {
         <button onClick={run} disabled={loading}
           style={{ width:"100%", padding:"12px", borderRadius:12, border:"none", background:`linear-gradient(135deg,${C.accentDark},${C.accent})`, color:"#fff", fontWeight:700, fontSize:15, cursor:"pointer", opacity:loading?0.7:1 }}>
           {loading
-            ? (market==="TW" ? "掃描台股中⋯" : "載入中⋯")
+            ? (market==="TW" ? "掃描台股中⋯" : "讀取中⋯")
             : `執行選股 · ${market==="TW"?"台股上市":"美股S&P500+"}`
           }
         </button>
