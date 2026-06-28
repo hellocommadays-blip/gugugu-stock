@@ -352,7 +352,7 @@ function AIAnalysis({ stock, bm, zone }) {
 // ============================================================
 // 股票查詢頁
 // ============================================================
-function StockPage({ initialQuery='', initialMarket=null, onQueryUsed, onAddWatchlist }) {
+function StockPage({ initialQuery='', initialMarket=null, rates={}, onQueryUsed, onAddWatchlist }) {
   const [query, setQuery]     = useState(initialQuery);
   const [sugg,  setSugg]      = useState([]);
   const [stock, setStock]     = useState(null);
@@ -461,6 +461,9 @@ function StockPage({ initialQuery='', initialMarket=null, onQueryUsed, onAddWatc
                   {stock.market==="JP" && stock.isADR && <Tag color="#7C3AED">ADR</Tag>}
                 </div>
                 <div style={{ fontSize:34, fontWeight:900, color:C.navy, fontFamily:"monospace", letterSpacing:-1 }}>{cs}{fmt(stock.price)}</div>
+                {stock.market==='US' && rates?.USD?.sell && (
+                  <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>≈ NT${fmt(stock.price * rates.USD.sell)}</div>
+                )}
                 <div style={{ fontSize:15, marginTop:4, color:stock.change>=0?C.up:C.down, fontWeight:600 }}>
                   {stock.change>=0?"▲":"▼"} {Math.abs(stock.change).toFixed(2)} ({fmtPct(stock.changePct)})
                 </div>
@@ -652,7 +655,7 @@ function StockPage({ initialQuery='', initialMarket=null, onQueryUsed, onAddWatc
 // ============================================================
 // 選股頁（台股 + 美股 + 日股）
 // ============================================================
-function ScreenerPage({ onSelectStock }) {
+function ScreenerPage({ onSelectStock, user, rates={} }) {
   const [market,       setMarket]       = useState("TW"); // TW | US | JP
   const [selectedZone, setSelectedZone] = useState("全部");
   const [results,      setResults]      = useState([]);
@@ -992,12 +995,17 @@ function ScreenerPage({ onSelectStock }) {
                       <div style={{ fontSize:12, color:C.navy, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.name}</div>
                       {s.industry && s.industry !== "—" && <div style={{ fontSize:11, color:C.muted, marginTop:1 }}>{s.industry}</div>}
                     </div>
-                    <span style={{ fontSize:13, fontWeight:600, color:C.navy, textAlign:"right", fontFamily:"monospace" }}>
-                      {s.price ? `${displayCS}${fmt(s.price)}` : "—"}
+                    <div style={{ textAlign:"right" }}>
+                      <div style={{ fontSize:13, fontWeight:600, color:C.navy, fontFamily:"monospace" }}>
+                        {s.price ? `${displayCS}${fmt(s.price)}` : "—"}
+                      </div>
                       {s.changePct != null && (
                         <div style={{ fontSize:10, color:s.changePct>=0?C.up:C.down }}>{fmtPct(s.changePct)}</div>
                       )}
-                    </span>
+                      {s.market === 'US' && s.price && rates?.USD?.sell && (
+                        <div style={{ fontSize:10, color:C.faint }}>≈NT${fmt(s.price*rates.USD.sell)}</div>
+                      )}
+                    </div>
                     <span style={{ fontSize:12, color:C.muted, textAlign:"right" }}>{s.pe ? fmt(s.pe,1) : "—"}</span>
                     <span style={{ fontSize:12, color:C.muted, textAlign:"right" }}>{(s.divYield||s.dividendYield) ? `${fmt(s.divYield||s.dividendYield,1)}%` : "—"}</span>
                     <span style={{ fontSize:11, fontWeight:700, color:zoneColor[s.zone]||C.muted, textAlign:"right" }}>
@@ -1022,7 +1030,7 @@ function ScreenerPage({ onSelectStock }) {
 // ============================================================
 // 自選清單頁
 // ============================================================
-function WatchlistPage({ user, onSelectStock }) {
+function WatchlistPage({ user, rates={}, onSelectStock }) {
   const [list,    setList]    = useState([]);
   const [loading, setLoading] = useState(false);
   const [addSym,  setAddSym]  = useState("");
@@ -1163,9 +1171,14 @@ function WatchlistPage({ user, onSelectStock }) {
                   <div style={{ fontSize:13, color:C.navy, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{name}</div>
                   {(() => { const found = STOCK_LIST.find(s=>s.sym===item.symbol); return found?.industry ? <div style={{ fontSize:11, color:C.navyMid, marginTop:1 }}>{found.industry}</div> : null; })()}
                 </div>
-                <span style={{ fontSize:13, fontWeight:700, color:C.navy, textAlign:"right", fontFamily:"monospace" }}>
-                  {p ? `${cs}${fmt(p.price)}` : "—"}
-                </span>
+                <div style={{ textAlign:"right" }}>
+                  <div style={{ fontSize:13, fontWeight:700, color:C.navy, fontFamily:"monospace" }}>
+                    {p ? `${cs}${fmt(p.price)}` : "—"}
+                  </div>
+                  {market==='US' && p?.price && rates?.USD?.sell && (
+                    <div style={{ fontSize:11, color:C.faint }}>≈NT${fmt(p.price*rates.USD.sell)}</div>
+                  )}
+                </div>
                 <span style={{ fontSize:12, textAlign:"right", color:p?.changePct>=0?C.up:C.down, fontFamily:"monospace" }}>
                   {p ? fmtPct(p.changePct) : "—"}
                 </span>
@@ -1189,7 +1202,7 @@ function WatchlistPage({ user, onSelectStock }) {
 // ============================================================
 // 持倉管理頁（接 Supabase）
 // ============================================================
-function PortfolioPage({ user }) {
+function PortfolioPage({ user, rates={} }) {
   const [holdings, setHoldings] = useState([]);
   const [loading, setLoading]   = useState(false);
   const [addForm, setAddForm]   = useState({ symbol:"", shares:"", cost:"", date:"" });
@@ -1200,7 +1213,7 @@ function PortfolioPage({ user }) {
   const [expandedLots, setExpandedLots] = useState({});
   const [editForm, setEditForm]   = useState({ shares:"", cost:"", date:"" });
   const [prices, setPrices]     = useState({});
-  const [rates,  setRates]      = useState({ USD:{ sell:32.5 }, JPY:{ sell:0.21 } });
+
   const [dividends, setDividends] = useState({});
   const [showDivSym, setShowDivSym] = useState(null);
   const [divForm, setDivForm]   = useState({ exDate:"", cashDiv:"", shares:"", note:"" });
@@ -1223,11 +1236,6 @@ function PortfolioPage({ user }) {
       loadDividends(syms);
     }
   }, [holdings.length]);
-
-  // 載入匯率
-  useEffect(() => {
-    fetch('/api/rate').then(r=>r.json()).then(d=>{ if(d.success) setRates(d.rates); }).catch(()=>{});
-  }, []);
 
   // 載入配息記錄（Supabase）
   async function loadDividends(syms) {
@@ -1816,6 +1824,12 @@ export default function App() {
   const [user,        setUser]      = useState(null);
   const [stockQuery,  setStockQuery] = useState(""); // 跨頁籤查詢
   const [stockMarket, setStockMarket] = useState(null); // 跨頁籤查詢市場
+  const [rates, setRates] = useState({ USD:{ sell:32.5 }, JPY:{ sell:0.21 } });
+
+  // 抓匯率（啟動時一次）
+  useEffect(() => {
+    fetch('/api/rate').then(r=>r.json()).then(d=>{ if(d.success) setRates(d.rates); }).catch(()=>{});
+  }, []);
 
   // 監聽登入狀態
   useEffect(() => {
@@ -1877,7 +1891,7 @@ export default function App() {
 
       {/* Content */}
       <div style={{ maxWidth:960, margin:"0 auto", padding:"18px 14px 40px" }}>
-        {tab==="stock"     && <StockPage initialQuery={stockQuery} initialMarket={stockMarket} onQueryUsed={()=>{ setStockQuery(""); setStockMarket(null); }} onAddWatchlist={async(stock)=>{
+        {tab==="stock"     && <StockPage initialQuery={stockQuery} initialMarket={stockMarket} rates={rates} onQueryUsed={()=>{ setStockQuery(""); setStockMarket(null); }} onAddWatchlist={async(stock)=>{
           if (!stock) return;
           const sym = stock.symbol; const market = stock.market || "TW"; const name = stock.name || sym;
           if (user) {
@@ -1890,9 +1904,9 @@ export default function App() {
           }
           alert(`已將 ${name}（${sym}）加入自選組合`);
         }} />}
-        {tab==="screener"  && <ScreenerPage onSelectStock={(sym, mkt)=>{ setStockQuery(sym); setStockMarket(mkt||null); setTab("stock"); }} user={user} />}
-        {tab==="watchlist" && <WatchlistPage user={user} onSelectStock={sym=>{ setStockQuery(sym); setTab("stock"); }} />}
-        {tab==="portfolio" && <PortfolioPage user={user} />}
+        {tab==="screener"  && <ScreenerPage onSelectStock={(sym, mkt)=>{ setStockQuery(sym); setStockMarket(mkt||null); setTab("stock"); }} user={user} rates={rates} />}
+        {tab==="watchlist" && <WatchlistPage user={user} rates={rates} onSelectStock={sym=>{ setStockQuery(sym); setTab("stock"); }} />}
+        {tab==="portfolio" && <PortfolioPage user={user} rates={rates} />}
       </div>
     </div>
   );
