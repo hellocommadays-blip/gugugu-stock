@@ -1196,10 +1196,15 @@ function PortfolioPage({ user }) {
   const [lotForm, setLotForm]   = useState({ shares:"", cost:"", date:"" });
   const [showAdd, setShowAdd]   = useState(false);
   const [showLotId, setShowLotId] = useState(null);
-  const [editLotKey, setEditLotKey] = useState(null); // "symbol-index"
-  const [expandedLots, setExpandedLots] = useState({}); // symbol -> bool
+  const [editLotKey, setEditLotKey] = useState(null);
+  const [expandedLots, setExpandedLots] = useState({});
   const [editForm, setEditForm]   = useState({ shares:"", cost:"", date:"" });
   const [prices, setPrices]     = useState({});
+  const [rates,  setRates]      = useState({ USD:{ sell:32.5 }, JPY:{ sell:0.21 } });
+  const [dividends, setDividends] = useState({});
+  const [showDivSym, setShowDivSym] = useState(null);
+  const [divForm, setDivForm]   = useState({ exDate:"", cashDiv:"", shares:"", note:"" });
+  const [showDivInput, setShowDivInput] = useState(null);
 
   // 載入持倉
   useEffect(() => {
@@ -1210,6 +1215,91 @@ function PortfolioPage({ user }) {
     }
     loadHoldings();
   }, [user]);
+
+  // 持倉載入後，拉配息記錄
+  useEffect(() => {
+    if (holdings.length > 0) {
+      const syms = [...new Set(holdings.map(h=>h.symbol))];
+      loadDividends(syms);
+    }
+  }, [holdings.length]);
+
+  // 載入匯率
+  useEffect(() => {
+    fetch('/api/rate').then(r=>r.json()).then(d=>{ if(d.success) setRates(d.rates); }).catch(()=>{});
+  }, []);
+
+  // 載入配息記錄（Supabase）
+  async function loadDividends(syms) {
+    if (!user || !syms?.length) return;
+    const { data } = await supabase
+      .from('dividends')
+      .select('*')
+      .eq('user_id', user.id)
+      .in('symbol', syms)
+      .order('ex_date', { ascending: false });
+    if (!data) return;
+    const grouped = {};
+    data.forEach(d => {
+      if (!grouped[d.symbol]) grouped[d.symbol] = [];
+      grouped[d.symbol].push(d);
+    });
+    setDividends(grouped);
+  }
+
+  // 新增配息記錄
+  async function addDividend(symbol, market) {
+    if (!divForm.exDate || !divForm.cashDiv) return;
+    const shares = parseFloat(divForm.shares) || 0;
+    const cashDiv = parseFloat(divForm.cashDiv) || 0;
+    const record = {
+      user_id: user?.id,
+      symbol, market,
+      ex_date:  divForm.exDate,
+      amount:   cashDiv,
+      shares:   shares,
+      total:    shares * cashDiv,
+      note:     divForm.note || null,
+    };
+    if (user) {
+      await supabase.from('dividends').insert(record);
+      loadDividends([symbol]);
+    }
+    setDivForm({ exDate:"", cashDiv:"", shares:"", note:"" });
+    setShowDivInput(null);
+  }
+
+  // 刪除配息記錄
+  async function deleteDividend(id, symbol) {
+    if (!user) return;
+    await supabase.from('dividends').delete().eq('id', id);
+    loadDividends([symbol]);
+  }
+
+  // 從 FinMind 拉歷史配息（台股）
+  async function fetchFinMindDividends(symbol) {
+    try {
+      const r = await fetch(`/api/finmind?type=dividend&symbol=${symbol}`);
+      const d = await r.json();
+      if (!d.success || !d.data?.length) return;
+      // 批次 upsert 到 Supabase
+      const records = d.data.map(div => ({
+        user_id: user.id,
+        symbol,
+        market:   'TW',
+        ex_date:  div.exDate,
+        pay_date: div.payDate || null,
+        amount:   div.cashDiv,
+        shares:   null,
+        total:    null,
+        note:     `FinMind 自動匯入（${div.year}）`,
+      })).filter(r => r.ex_date);
+      if (records.length) {
+        await supabase.from('dividends').upsert(records, { onConflict: 'user_id,symbol,ex_date', ignoreDuplicates: true });
+        loadDividends([symbol]);
+      }
+    } catch(_) {}
+  }
 
   // 載入完持倉後：抓即時價格 + 自動修正名稱
   useEffect(() => {
@@ -1430,6 +1520,17 @@ function PortfolioPage({ user }) {
             </InnerBox>
           ))}
         </div>
+        {/* 美股持倉換算台幣 */}
+        {calced.some(h=>h.market==='US') && (
+          <div style={{ fontSize:12, color:C.muted, marginBottom:12, padding:"8px 12px", background:C.surface2, borderRadius:8 }}>
+            💱 匯率換算（台銀即期賣出）：
+            {calced.filter(h=>h.market==='US').map(h=>(
+              <span key={h.symbol} style={{ marginLeft:8 }}>
+                {h.symbol} {h.cs}{fmt(h.currentVal)} ≈ NT${fmt(h.currentVal*(rates.USD?.sell||32.5))}
+              </span>
+            ))}
+          </div>
+        )}
         <button onClick={()=>setShowAdd(v=>!v)} style={{ width:"100%", padding:"10px", borderRadius:10, border:`1.5px dashed ${C.accent}`, background:"transparent", color:C.accent, fontWeight:700, fontSize:14, cursor:"pointer" }}>
           {showAdd?"✕ 取消":"+ 新增持股"}
         </button>
@@ -1537,6 +1638,78 @@ function PortfolioPage({ user }) {
               </div>
             )}
           </InnerBox>
+
+          {/* 配息記錄 */}
+          <div style={{ marginBottom:8 }}>
+            <div onClick={()=>setShowDivSym(v=>v===h.symbol?null:h.symbol)}
+              style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 12px", background:C.surface2, borderRadius:8, cursor:"pointer", marginBottom:4 }}>
+              <div style={{ fontSize:13, color:C.navy }}>
+                💰 配息記錄
+                {dividends[h.symbol]?.length > 0 && (
+                  <span style={{ fontSize:11, color:C.muted, marginLeft:6 }}>
+                    （共 {dividends[h.symbol].length} 筆 · 累計 NT${fmt(dividends[h.symbol].reduce((a,d)=>a+(d.total||0),0))}）
+                  </span>
+                )}
+              </div>
+              <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                {h.market==='TW' && user && (
+                  <button onClick={e=>{ e.stopPropagation(); fetchFinMindDividends(h.symbol); }}
+                    style={{ fontSize:11, color:C.accent, background:"transparent", border:`1px solid ${C.accent}44`, borderRadius:6, padding:"2px 8px", cursor:"pointer" }}>
+                    自動匯入
+                  </button>
+                )}
+                <span style={{ fontSize:12, color:C.muted }}>{showDivSym===h.symbol?"▲":"▼"}</span>
+              </div>
+            </div>
+
+            {showDivSym===h.symbol && (
+              <InnerBox>
+                {dividends[h.symbol]?.length > 0 ? (
+                  <div style={{ marginBottom:8 }}>
+                    <div style={{ display:"grid", gridTemplateColumns:"100px 70px 60px 1fr 50px", gap:6, fontSize:11, color:C.faint, fontWeight:600, padding:"4px 0", borderBottom:`1px solid ${C.border}` }}>
+                      <span>除息日</span><span style={{textAlign:"right"}}>現金股利</span><span style={{textAlign:"right"}}>股數</span><span style={{textAlign:"right"}}>合計</span><span></span>
+                    </div>
+                    {dividends[h.symbol].map(d=>(
+                      <div key={d.id} style={{ display:"grid", gridTemplateColumns:"100px 70px 60px 1fr 50px", gap:6, fontSize:12, color:C.muted, padding:"6px 0", borderBottom:`1px solid ${C.border}`, alignItems:"center" }}>
+                        <span>{d.ex_date}</span>
+                        <span style={{textAlign:"right"}}>{h.cs}{fmt(d.amount,2)}</span>
+                        <span style={{textAlign:"right"}}>{d.shares||"—"}</span>
+                        <span style={{textAlign:"right", fontFamily:"monospace"}}>{d.total ? `${h.cs}${fmt(d.total)}` : "—"}</span>
+                        <button onClick={()=>deleteDividend(d.id, h.symbol)}
+                          style={{ fontSize:11, color:C.faint, background:"transparent", border:"none", cursor:"pointer", textAlign:"right" }}>刪除</button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ fontSize:12, color:C.faint, padding:"8px 0" }}>尚無配息記錄</div>
+                )}
+
+                {showDivInput===h.symbol ? (
+                  <div style={{ marginTop:8, display:"flex", flexDirection:"column", gap:6 }}>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
+                      <input value={divForm.exDate} onChange={e=>setDivForm(f=>({...f,exDate:e.target.value}))}
+                        type="date" placeholder="除息日" style={{ ...inputStyle, padding:"6px 10px", fontSize:12 }} />
+                      <input value={divForm.cashDiv} onChange={e=>setDivForm(f=>({...f,cashDiv:e.target.value}))}
+                        type="number" placeholder="現金股利/股" style={{ ...inputStyle, padding:"6px 10px", fontSize:12 }} />
+                      <input value={divForm.shares} onChange={e=>setDivForm(f=>({...f,shares:e.target.value}))}
+                        type="number" placeholder="持有股數" style={{ ...inputStyle, padding:"6px 10px", fontSize:12 }} />
+                    </div>
+                    <div style={{ display:"flex", gap:6 }}>
+                      <button onClick={()=>addDividend(h.symbol, h.market)}
+                        style={{ flex:1, padding:"6px", borderRadius:8, border:"none", background:C.accent, color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer" }}>新增</button>
+                      <button onClick={()=>setShowDivInput(null)}
+                        style={{ flex:1, padding:"6px", borderRadius:8, border:`1px solid ${C.border}`, background:"transparent", color:C.muted, fontSize:12, cursor:"pointer" }}>取消</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button onClick={()=>setShowDivInput(h.symbol)}
+                    style={{ fontSize:12, color:C.accent, background:"transparent", border:`1px dashed ${C.accent}66`, borderRadius:8, padding:"6px 12px", cursor:"pointer", width:"100%", marginTop:4 }}>
+                    + 新增配息記錄
+                  </button>
+                )}
+              </InnerBox>
+            )}
+          </div>
 
           <button onClick={()=>setShowLotId(v=>v===h.symbol?null:h.symbol)}
             style={{ width:"100%", padding:"8px", borderRadius:10, border:`1px dashed ${C.accent}88`, background:"transparent", color:C.accent, fontSize:13, cursor:"pointer" }}>
