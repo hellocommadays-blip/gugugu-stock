@@ -77,7 +77,10 @@ export default async function handler(req, res) {
   if (!FINNHUB_KEY)  return res.status(500).json({ error: 'FINNHUB_API_KEY 未設定' });
   if (!SUPABASE_URL) return res.status(500).json({ error: 'SUPABASE_URL 未設定' });
 
-  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+    auth:     { persistSession: false },
+    realtime: { transport: () => null },  // 停用 WebSocket
+  });
   const results  = [];
   const errors   = [];
 
