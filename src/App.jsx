@@ -973,10 +973,11 @@ function ScreenerPage({ onSelectStock, user, rates={} }) {
           ) : (
             <div>
               {/* 表頭 */}
-              <div style={{ display:"grid", gridTemplateColumns:"60px 1fr 80px 48px 58px 72px", gap:6, padding:"8px 14px", background:C.surface2, fontSize:11, color:C.muted, fontWeight:600 }}>
+              <div style={{ display:"grid", gridTemplateColumns:"60px 1fr 72px 72px 44px 54px 70px", gap:6, padding:"8px 14px", background:C.surface2, fontSize:11, color:C.muted, fontWeight:600 }}>
                 <span>代號</span>
                 <span>名稱／產業</span>
                 <span style={{ textAlign:"right" }}>現價</span>
+                <span style={{ textAlign:"right" }}>台幣</span>
                 <span style={{ textAlign:"right" }}>PE</span>
                 <span style={{ textAlign:"right" }}>殖利率</span>
                 <span style={{ textAlign:"right" }}>估值區間</span>
@@ -987,7 +988,7 @@ function ScreenerPage({ onSelectStock, user, rates={} }) {
                 return (
                   <div key={sym}
                     onClick={()=>onSelectStock&&onSelectStock(sym, s.market||market)}
-                    style={{ display:"grid", gridTemplateColumns:"60px 1fr 80px 48px 58px 72px", gap:6, padding:"10px 14px", borderBottom:`1px solid ${C.surface2}`, alignItems:"center", cursor:"pointer" }}
+                    style={{ display:"grid", gridTemplateColumns:"60px 1fr 72px 72px 44px 54px 70px", gap:6, padding:"10px 14px", borderBottom:`1px solid ${C.surface2}`, alignItems:"center", cursor:"pointer" }}
                     onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
                     onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                     <span style={{ fontSize:13, fontWeight:700, color:C.accent }}>{sym}</span>
@@ -1002,9 +1003,11 @@ function ScreenerPage({ onSelectStock, user, rates={} }) {
                       {s.changePct != null && (
                         <div style={{ fontSize:10, color:s.changePct>=0?C.up:C.down }}>{fmtPct(s.changePct)}</div>
                       )}
-                      {s.market === 'US' && s.price && rates?.USD?.sell && (
-                        <div style={{ fontSize:13, color:C.navy, marginTop:2, fontFamily:"monospace" }}>NT${fmt(s.price*rates.USD.sell)}</div>
-                      )}
+                    </div>
+                    <div style={{ textAlign:"right", fontSize:13, color:C.navy, fontFamily:"monospace" }}>
+                      {s.market === 'US' && s.price && rates?.USD?.sell
+                        ? `NT$${fmt(s.price*rates.USD.sell)}`
+                        : "—"}
                     </div>
                     <span style={{ fontSize:12, color:C.muted, textAlign:"right" }}>{s.pe ? fmt(s.pe,1) : "—"}</span>
                     <span style={{ fontSize:12, color:C.muted, textAlign:"right" }}>{(s.divYield||s.dividendYield) ? `${fmt(s.divYield||s.dividendYield,1)}%` : "—"}</span>
@@ -1152,8 +1155,8 @@ function WatchlistPage({ user, rates={}, onSelectStock }) {
         <Card><div style={{ textAlign:"center", padding:32, color:C.muted }}>還沒有自選股票，輸入代號開始新增</div></Card>
       ) : (
         <Card style={{ padding:0, overflow:"hidden" }}>
-          <div style={{ display:"grid", gridTemplateColumns:"80px 1fr 100px 80px 50px", gap:8, padding:"8px 16px", background:C.surface2, fontSize:11, color:C.muted, fontWeight:600 }}>
-            <span>代號</span><span>名稱／產業</span><span style={{ textAlign:"right" }}>現價</span><span style={{ textAlign:"right" }}>漲跌</span><span></span>
+          <div style={{ display:"grid", gridTemplateColumns:"80px 1fr 90px 90px 72px 44px", gap:8, padding:"8px 16px", background:C.surface2, fontSize:11, color:C.muted, fontWeight:600 }}>
+            <span>代號</span><span>名稱／產業</span><span style={{ textAlign:"right" }}>現價</span><span style={{ textAlign:"right" }}>台幣</span><span style={{ textAlign:"right" }}>漲跌</span><span></span>
           </div>
           {list.map(item => {
             const p = prices[item.symbol];
@@ -1162,7 +1165,7 @@ function WatchlistPage({ user, rates={}, onSelectStock }) {
             const cs = market === "US" ? "$" : market === "JP" ? "¥" : "NT$";
             return (
               <div key={item.symbol}
-                style={{ display:"grid", gridTemplateColumns:"80px 1fr 100px 80px 50px", gap:8, padding:"12px 16px", borderBottom:`1px solid ${C.surface2}`, alignItems:"center" }}
+                style={{ display:"grid", gridTemplateColumns:"80px 1fr 90px 90px 72px 44px", gap:8, padding:"12px 16px", borderBottom:`1px solid ${C.surface2}`, alignItems:"center" }}
                 onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
                 onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                 <span onClick={()=>onSelectStock&&onSelectStock(item.symbol)}
@@ -1171,13 +1174,13 @@ function WatchlistPage({ user, rates={}, onSelectStock }) {
                   <div style={{ fontSize:13, color:C.navy, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{name}</div>
                   {(() => { const found = STOCK_LIST.find(s=>s.sym===item.symbol); return found?.industry ? <div style={{ fontSize:11, color:C.navyMid, marginTop:1 }}>{found.industry}</div> : null; })()}
                 </div>
-                <div style={{ textAlign:"right" }}>
-                  <div style={{ fontSize:13, fontWeight:700, color:C.navy, fontFamily:"monospace" }}>
-                    {p ? `${cs}${fmt(p.price)}` : "—"}
-                  </div>
-                  {market==='US' && p?.price && rates?.USD?.sell && (
-                    <div style={{ fontSize:13, color:C.navy, marginTop:2, fontFamily:"monospace" }}>NT${fmt(p.price*rates.USD.sell)}</div>
-                  )}
+                <div style={{ textAlign:"right", fontSize:13, fontWeight:700, color:C.navy, fontFamily:"monospace" }}>
+                  {p ? `${cs}${fmt(p.price)}` : "—"}
+                </div>
+                <div style={{ textAlign:"right", fontSize:13, color:C.navy, fontFamily:"monospace" }}>
+                  {market==='US' && p?.price && rates?.USD?.sell
+                    ? `NT$${fmt(p.price*rates.USD.sell)}`
+                    : "—"}
                 </div>
                 <span style={{ fontSize:12, textAlign:"right", color:p?.changePct>=0?C.up:C.down, fontFamily:"monospace" }}>
                   {p ? fmtPct(p.changePct) : "—"}
