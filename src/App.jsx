@@ -984,8 +984,10 @@ function ScreenerPage({ onSelectStock }) {
                     onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                     <span style={{ fontSize:13, fontWeight:700, color:C.accent }}>{sym}</span>
                     <div style={{ overflow:"hidden" }}>
-                      <div style={{ fontSize:12, color:C.navy, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.name}</div>
-                      {s.industry && s.industry !== "—" && <div style={{ fontSize:11, color:C.navyMid, marginTop:1 }}>{s.industry}</div>}
+                      <div style={{ fontSize:12, color:C.navy, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                        {s.name}
+                        {s.industry && s.industry !== "—" && <span style={{ fontSize:11, color:C.muted, marginLeft:6 }}>{s.industry}</span>}
+                      </div>
                     </div>
                     <span style={{ fontSize:13, fontWeight:600, color:C.navy, textAlign:"right", fontFamily:"monospace" }}>
                       {s.price ? `${displayCS}${fmt(s.price)}` : "—"}
@@ -1192,6 +1194,7 @@ function PortfolioPage({ user }) {
   const [showAdd, setShowAdd]   = useState(false);
   const [showLotId, setShowLotId] = useState(null);
   const [editLotKey, setEditLotKey] = useState(null); // "symbol-index"
+  const [expandedLots, setExpandedLots] = useState({}); // symbol -> bool
   const [editForm, setEditForm]   = useState({ shares:"", cost:"", date:"" });
   const [prices, setPrices]     = useState({});
 
@@ -1473,43 +1476,63 @@ function PortfolioPage({ user }) {
           </div>
 
           <InnerBox style={{ marginBottom:10 }}>
-            <div style={{ fontSize:13, color:C.navy, marginBottom:6 }}>分批明細</div>
-            {h.lots.map((l,i)=>{
-              const key = `${h.symbol}-${i}`;
-              const isEditing = editLotKey === key;
-              return (
-                <div key={i} style={{ padding:"6px 0", borderBottom:i<h.lots.length-1?`1px solid ${C.border}`:"none" }}>
-                  {isEditing ? (
-                    <div style={{ display:"flex", flexDirection:"column", gap:6, marginTop:4 }}>
-                      <div style={{ display:"flex", gap:6 }}>
-                        <input value={editForm.shares} onChange={e=>setEditForm(f=>({...f,shares:e.target.value}))}
-                          placeholder="股數" type="number" style={{ ...inputStyle, flex:1, padding:"6px 10px", fontSize:13 }} />
-                        <input value={editForm.cost} onChange={e=>setEditForm(f=>({...f,cost:e.target.value}))}
-                          placeholder="成本" type="number" style={{ ...inputStyle, flex:1, padding:"6px 10px", fontSize:13 }} />
-                        <input value={editForm.date} onChange={e=>setEditForm(f=>({...f,date:e.target.value}))}
-                          type="date" style={{ ...inputStyle, flex:1, padding:"6px 10px", fontSize:13 }} />
-                      </div>
-                      <div style={{ display:"flex", gap:6 }}>
-                        <button onClick={()=>updateLot(h.symbol, h.market, l.id, i, editForm)}
-                          style={{ flex:1, padding:"6px", borderRadius:8, border:"none", background:C.accent, color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer" }}>儲存</button>
-                        <button onClick={()=>setEditLotKey(null)}
-                          style={{ flex:1, padding:"6px", borderRadius:8, border:`1px solid ${C.border}`, background:"transparent", color:C.muted, fontSize:12, cursor:"pointer" }}>取消</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", fontSize:12, color:C.muted }}>
-                      <span>第{i+1}批 · {l.date} · {l.shares.toLocaleString()} 股 @ {h.cs}{fmt(l.cost)}</span>
-                      <div style={{ display:"flex", gap:8 }}>
-                        <button onClick={()=>{ setEditLotKey(key); setEditForm({ shares:String(l.shares), cost:String(l.cost), date:l.date||"" }); }}
-                          style={{ fontSize:11, color:C.accent, background:"transparent", border:"none", cursor:"pointer" }}>編輯</button>
-                        <button onClick={()=>{ if(window.confirm(`確定刪除第${i+1}批？`)) deleteLot(h.symbol, l.id, i); }}
-                          style={{ fontSize:11, color:C.faint, background:"transparent", border:"none", cursor:"pointer" }}>刪除</button>
-                      </div>
-                    </div>
-                  )}
+            {/* 標題列：點擊展開/收合 */}
+            <div onClick={()=>setExpandedLots(v=>({...v,[h.symbol]:!v[h.symbol]}))}
+              style={{ display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer", userSelect:"none" }}>
+              <div style={{ fontSize:13, color:C.navy }}>
+                分批明細
+                <span style={{ fontSize:11, color:C.muted, marginLeft:6 }}>（{h.lots.length} 批）</span>
+              </div>
+              <span style={{ fontSize:12, color:C.muted }}>{expandedLots[h.symbol] ? "▲ 收合" : "▼ 展開"}</span>
+            </div>
+
+            {expandedLots[h.symbol] && (
+              <div style={{ marginTop:8 }}>
+                {/* 表頭 */}
+                <div style={{ display:"grid", gridTemplateColumns:"44px 1fr 60px 90px 80px", gap:6, padding:"4px 0", borderBottom:`1px solid ${C.border}`, fontSize:11, color:C.faint, fontWeight:600 }}>
+                  <span>批次</span><span>日期</span><span style={{textAlign:"right"}}>股數</span><span style={{textAlign:"right"}}>成本</span><span></span>
                 </div>
-              );
-            })}
+                {h.lots.map((l,i)=>{
+                  const key = `${h.symbol}-${i}`;
+                  const isEditing = editLotKey === key;
+                  return (
+                    <div key={i} style={{ borderBottom:i<h.lots.length-1?`1px solid ${C.border}`:"none" }}>
+                      {isEditing ? (
+                        <div style={{ padding:"8px 0", display:"flex", flexDirection:"column", gap:6 }}>
+                          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
+                            <input value={editForm.shares} onChange={e=>setEditForm(f=>({...f,shares:e.target.value}))}
+                              placeholder="股數" type="number" style={{ ...inputStyle, padding:"6px 10px", fontSize:12 }} />
+                            <input value={editForm.cost} onChange={e=>setEditForm(f=>({...f,cost:e.target.value}))}
+                              placeholder="成本" type="number" style={{ ...inputStyle, padding:"6px 10px", fontSize:12 }} />
+                            <input value={editForm.date} onChange={e=>setEditForm(f=>({...f,date:e.target.value}))}
+                              type="date" style={{ ...inputStyle, padding:"6px 10px", fontSize:12 }} />
+                          </div>
+                          <div style={{ display:"flex", gap:6 }}>
+                            <button onClick={()=>updateLot(h.symbol, h.market, l.id, i, editForm)}
+                              style={{ flex:1, padding:"6px", borderRadius:8, border:"none", background:C.accent, color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer" }}>儲存</button>
+                            <button onClick={()=>setEditLotKey(null)}
+                              style={{ flex:1, padding:"6px", borderRadius:8, border:`1px solid ${C.border}`, background:"transparent", color:C.muted, fontSize:12, cursor:"pointer" }}>取消</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ display:"grid", gridTemplateColumns:"44px 1fr 60px 90px 80px", gap:6, padding:"7px 0", alignItems:"center", fontSize:12, color:C.muted }}>
+                          <span style={{ fontWeight:600, color:C.navy }}>#{i+1}</span>
+                          <span>{l.date}</span>
+                          <span style={{ textAlign:"right" }}>{l.shares.toLocaleString()}</span>
+                          <span style={{ textAlign:"right", fontFamily:"monospace" }}>{h.cs}{fmt(l.cost)}</span>
+                          <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+                            <button onClick={()=>{ setEditLotKey(key); setEditForm({ shares:String(l.shares), cost:String(l.cost), date:l.date||"" }); }}
+                              style={{ fontSize:11, color:C.accent, background:"transparent", border:"none", cursor:"pointer" }}>編輯</button>
+                            <button onClick={()=>{ if(window.confirm(`確定刪除第${i+1}批？`)) deleteLot(h.symbol, l.id, i); }}
+                              style={{ fontSize:11, color:C.faint, background:"transparent", border:"none", cursor:"pointer" }}>刪除</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </InnerBox>
 
           <button onClick={()=>setShowLotId(v=>v===h.symbol?null:h.symbol)}
