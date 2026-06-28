@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { createClient } from "@supabase/supabase-js";
-import { STOCK_LIST, SCREENER_US_DEDUP } from "./stockList.js";
+import { STOCK_LIST, SCREENER_US_DEDUP, SCREENER_JP } from "./stockList.js";
 
 // ============================================================
 // Supabase 客戶端
@@ -314,8 +314,19 @@ function AIAnalysis({ stock, bm, zone }) {
 
       {analysis && (
         <div>
-          <div style={{ fontSize:14, color:C.navy, lineHeight:1.8, whiteSpace:"pre-wrap", marginBottom:12 }}>
-            {analysis}
+          <div style={{ fontSize:14, color:C.navy, lineHeight:1.8, marginBottom:12 }}>
+            {analysis.split('\n').map((line, i) => {
+              // **text** → <strong>
+              const parts = line.split(/\*\*([^*]+)\*\*/g);
+              return (
+                <div key={i} style={{ marginBottom: line === '' ? 8 : 0 }}>
+                  {parts.map((p, j) => j % 2 === 1
+                    ? <strong key={j}>{p}</strong>
+                    : <span key={j}>{p}</span>
+                  )}
+                </div>
+              );
+            })}
             {!done && <span style={{ opacity:0.5 }}>▌</span>}
           </div>
           {done && (
@@ -767,64 +778,87 @@ function ScreenerPage({ onSelectStock }) {
     setSelectedZone("全部");
     if (market === "TW") {
       runTW();
+    } else if (market === "US") {
+      runForeign(SCREENER_US_DEDUP, "US");
     } else {
-      runUS();
+      runJP();
     }
   }
 
-  // ── 美股選股：從 Supabase stocks_cache 讀取 ─────────────
-  async function runUS() {
-    setLoading(true); setRan(true); setScanLog("");
-    try {
-      const { data, error } = await supabase
-        .from('stocks_cache')
-        .select('*')
-        .eq('market', 'US')
-        .order('symbol');
+  // ── 日股選股（J-Quants，東証代號）───────────────────────
+  async function runJP() {
+    setLoading(true); setRan(true);
+    setScanProgress({ done:0, total:SCREENER_JP.length });
+    setScanLog("連接 J-Quants API...");
 
-      if (error) throw new Error(error.message);
-      if (!data?.length) {
-        // 沒有快取資料時，fallback 到即時抓取
-        setScanLog("資料庫無快取，改為即時掃描...");
-        setLoading(false);
-        runForeign(SCREENER_US_DEDUP, "US");
-        return;
-      }
+    const BATCH    = 3;
+    const DELAY_MS = 800;
+    const collected = [];
 
-      // 把 Supabase 欄位名轉成前端格式
-      const mapped = data.map(s => ({
-        symbol:    s.symbol,
-        name:      s.name,
-        industry:  s.industry || "—",
-        market:    'US',
-        price:     s.price,
-        changePct: s.change_pct,
-        pe:        s.pe,
-        pb:        s.pb,
-        divYield:  s.div_yield,
-        adjustedROE:            s.roe,
-        adjustedEquityPerShare: s.bps,
-        bm:        s.bm,
-        zone:      s.zone || "—",
-        ratio:     s.ratio,
+    for (let i = 0; i < SCREENER_JP.length; i += BATCH) {
+      const batch = SCREENER_JP.slice(i, i + BATCH);
+      setScanLog(`掃描：${batch.map(s=>s.name).join("、")}`);
+
+      const batchResults = await Promise.all(batch.map(async (s) => {
+        try {
+          const safeFetch = async (url) => {
+            try {
+              const controller = new AbortController();
+              const timer = setTimeout(() => controller.abort(), 9000);
+              const r = await fetch(url, { signal: controller.signal });
+              clearTimeout(timer);
+              if (!r.ok) return null;
+              return r.json().catch(() => null);
+            } catch (_) { return null; }
+          };
+          const [priceRes, finRes] = await Promise.all([
+            safeFetch(`/api/jquants?type=price&code=${s.code}`),
+            safeFetch(`/api/jquants?type=financials&code=${s.code}`),
+          ]);
+          if (!priceRes?.success) return null;
+          const q   = priceRes.data;
+          const fin = finRes?.success ? finRes.data : null;
+
+          const adjustedROE            = fin?.adjustedROE            || null;
+          const adjustedEquityPerShare = fin?.adjustedEquityPerShare || null;
+          const bm  = (adjustedEquityPerShare && adjustedROE)
+            ? adjustedEquityPerShare * (adjustedROE / 100) * 10
+            : null;
+          const zoneInfo = bm ? calcZone(q.price, bm) : null;
+
+          return {
+            symbol:    s.code,
+            name:      s.name,
+            industry:  s.industry || "—",
+            market:    "JP",
+            price:     q.price,
+            changePct: q.changePct,
+            pe:        null,
+            pb:        null,
+            divYield:  null,
+            adjustedROE,
+            adjustedEquityPerShare,
+            bm,
+            zone:  zoneInfo?.zone  || "—",
+            ratio: zoneInfo?.ratio || null,
+          };
+        } catch(_) { return null; }
       }));
 
-      // 取得更新時間
-      if (data[0]?.updated_at) {
-        const d = new Date(data[0].updated_at);
-        d.setHours(d.getHours() + 8);
-        setDataDate(d.toISOString().slice(0,10).replace(/-/g,'/'));
-      }
+      batchResults.forEach(r => r && collected.push(r));
+      setScanProgress(p => ({ ...p, done: Math.min(i + BATCH, SCREENER_JP.length) }));
 
-      setAllResults(mapped);
-      filterAndSort(mapped, selectedZone, sortBy);
-    } catch (err) {
-      console.error('runUS error:', err);
-      setScanLog("讀取失敗，改為即時掃描...");
-      runForeign(SCREENER_US_DEDUP, "US");
-    } finally {
-      setLoading(false);
+      const sorted = sortItems([...collected], sortBy);
+      setAllResults([...collected]);
+      setResults(selectedZone === "全部" ? sorted : sorted.filter(s=>s.zone===selectedZone));
+
+      if (i + BATCH < SCREENER_JP.length) {
+        await new Promise(r => setTimeout(r, DELAY_MS));
+      }
     }
+
+    setScanLog("");
+    setLoading(false);
   }
 
   function sortItems(data, sort) {
@@ -869,7 +903,7 @@ function ScreenerPage({ onSelectStock }) {
         <div style={{ marginBottom:16 }}>
           <SectionLabel>選擇市場</SectionLabel>
           <div style={{ display:"flex", gap:8 }}>
-            {[["TW","🇹🇼 台股"],["US","🇺🇸 美股"]].map(([m, label]) => (
+            {[["TW","🇹🇼 台股"],["US","🇺🇸 美股"],["JP","🇯🇵 日股ADR"]].map(([m, label]) => (
               <button key={m} onClick={()=>switchMarket(m)}
                 style={{ flex:1, padding:"10px 8px", borderRadius:12, border:`2px solid ${market===m?C.accent:C.border}`, background:market===m?C.accent+"14":"transparent", color:market===m?C.accent:C.muted, fontWeight:market===m?700:400, fontSize:13, cursor:"pointer" }}>
                 {label}
@@ -879,8 +913,8 @@ function ScreenerPage({ onSelectStock }) {
           {market !== "TW" && (
             <div style={{ fontSize:11, color:C.faint, marginTop:8, lineHeight:1.6 }}>
               {market === "US"
-                ? `⚡ 美股資料每日自動更新，共 ${allResults.length > 0 ? allResults.length : '100+'} 檔，即點即看。`
-                : null
+                ? `⚡ 掃描 ${SCREENER_US_DEDUP.length} 檔美股（S&P 500核心 + 熱門科技）。Finnhub 免費版有速率限制，約需 ${Math.ceil(SCREENER_US_DEDUP.length/4)*1}–${Math.ceil(SCREENER_US_DEDUP.length/4)*1+1} 分鐘，掃描中可即時看到已完成的結果。`
+                : `⚡ 掃描 ${SCREENER_JP.length} 檔日股ADR（日經225主要成分）。ADR 以美元計價，估值基準值為美元數字，供相對比較用。`
               }
             </div>
           )}
@@ -919,8 +953,8 @@ function ScreenerPage({ onSelectStock }) {
         <button onClick={run} disabled={loading}
           style={{ width:"100%", padding:"12px", borderRadius:12, border:"none", background:`linear-gradient(135deg,${C.accentDark},${C.accent})`, color:"#fff", fontWeight:700, fontSize:15, cursor:"pointer", opacity:loading?0.7:1 }}>
           {loading
-            ? (market==="TW" ? "掃描台股中⋯" : "讀取中⋯")
-            : `執行選股 · ${market==="TW"?"台股上市":"美股S&P500+"}`
+            ? (market==="TW" ? "掃描台股中⋯" : `掃描中 ${scanProgress.done}/${scanProgress.total}（${scanPct}%）`)
+            : `執行選股 · ${market==="TW"?"台股上市":market==="US"?"美股S&P500+":"日股ADR"}`
           }
         </button>
 
@@ -962,10 +996,9 @@ function ScreenerPage({ onSelectStock }) {
           ) : (
             <div>
               {/* 表頭 */}
-              <div style={{ display:"grid", gridTemplateColumns:"72px 1fr 90px 88px 56px 64px 76px", gap:6, padding:"8px 14px", background:C.surface2, fontSize:11, color:C.muted, fontWeight:600 }}>
+              <div style={{ display:"grid", gridTemplateColumns:"72px 1fr 88px 56px 64px 76px", gap:6, padding:"8px 14px", background:C.surface2, fontSize:11, color:C.muted, fontWeight:600 }}>
                 <span>代號</span>
-                <span>名稱</span>
-                <span>產業別</span>
+                <span>名稱／產業</span>
                 <span style={{ textAlign:"right" }}>現價</span>
                 <span style={{ textAlign:"right" }}>PE</span>
                 <span style={{ textAlign:"right" }}>殖利率</span>
@@ -977,12 +1010,14 @@ function ScreenerPage({ onSelectStock }) {
                 return (
                   <div key={sym}
                     onClick={()=>onSelectStock&&onSelectStock(sym, s.market||market)}
-                    style={{ display:"grid", gridTemplateColumns:"72px 1fr 90px 88px 56px 64px 76px", gap:6, padding:"10px 14px", borderBottom:`1px solid ${C.surface2}`, alignItems:"center", cursor:"pointer" }}
+                    style={{ display:"grid", gridTemplateColumns:"72px 1fr 88px 56px 64px 76px", gap:6, padding:"10px 14px", borderBottom:`1px solid ${C.surface2}`, alignItems:"center", cursor:"pointer" }}
                     onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
                     onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                     <span style={{ fontSize:13, fontWeight:700, color:C.accent }}>{sym}</span>
-                    <span style={{ fontSize:12, color:C.navy, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.name}</span>
-                    <span style={{ fontSize:10, color:C.faint, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.industry||"—"}</span>
+                    <div style={{ overflow:"hidden" }}>
+                      <div style={{ fontSize:12, color:C.navy, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.name}</div>
+                      {s.industry && s.industry !== "—" && <div style={{ fontSize:11, color:C.navyMid, marginTop:1 }}>{s.industry}</div>}
+                    </div>
                     <span style={{ fontSize:13, fontWeight:600, color:C.navy, textAlign:"right", fontFamily:"monospace" }}>
                       {s.price ? `${displayCS}${fmt(s.price)}` : "—"}
                       {s.changePct != null && (
@@ -1135,8 +1170,8 @@ function WatchlistPage({ user, onSelectStock }) {
         <Card><div style={{ textAlign:"center", padding:32, color:C.muted }}>還沒有自選股票，輸入代號開始新增</div></Card>
       ) : (
         <Card style={{ padding:0, overflow:"hidden" }}>
-          <div style={{ display:"grid", gridTemplateColumns:"80px 1fr 100px 100px 60px", gap:8, padding:"8px 16px", background:C.surface2, fontSize:11, color:C.muted, fontWeight:600 }}>
-            <span>代號</span><span>名稱</span><span style={{ textAlign:"right" }}>現價</span><span style={{ textAlign:"right" }}>漲跌</span><span></span>
+          <div style={{ display:"grid", gridTemplateColumns:"80px 1fr 100px 80px 50px", gap:8, padding:"8px 16px", background:C.surface2, fontSize:11, color:C.muted, fontWeight:600 }}>
+            <span>代號</span><span>名稱／產業</span><span style={{ textAlign:"right" }}>現價</span><span style={{ textAlign:"right" }}>漲跌</span><span></span>
           </div>
           {list.map(item => {
             const p = prices[item.symbol];
@@ -1145,13 +1180,15 @@ function WatchlistPage({ user, onSelectStock }) {
             const cs = market === "US" ? "$" : market === "JP" ? "¥" : "NT$";
             return (
               <div key={item.symbol}
-                style={{ display:"grid", gridTemplateColumns:"80px 1fr 100px 100px 60px", gap:8, padding:"12px 16px", borderBottom:`1px solid ${C.surface2}`, alignItems:"center" }}
+                style={{ display:"grid", gridTemplateColumns:"80px 1fr 100px 80px 50px", gap:8, padding:"12px 16px", borderBottom:`1px solid ${C.surface2}`, alignItems:"center" }}
                 onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
                 onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                 <span onClick={()=>onSelectStock&&onSelectStock(item.symbol)}
                   style={{ fontSize:13, fontWeight:700, color:C.accent, cursor:"pointer" }}>{item.symbol}</span>
-                <span onClick={()=>onSelectStock&&onSelectStock(item.symbol)}
-                  style={{ fontSize:13, color:C.navy, cursor:"pointer" }}>{name}</span>
+                <div onClick={()=>onSelectStock&&onSelectStock(item.symbol)} style={{ cursor:"pointer", overflow:"hidden" }}>
+                  <div style={{ fontSize:13, color:C.navy, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{name}</div>
+                  {(() => { const found = STOCK_LIST.find(s=>s.sym===item.symbol); return found?.industry ? <div style={{ fontSize:11, color:C.navyMid, marginTop:1 }}>{found.industry}</div> : null; })()}
+                </div>
                 <span style={{ fontSize:13, fontWeight:700, color:C.navy, textAlign:"right", fontFamily:"monospace" }}>
                   {p ? `${cs}${fmt(p.price)}` : "—"}
                 </span>
@@ -1410,6 +1447,7 @@ function PortfolioPage({ user }) {
                   <span style={{ fontSize:14, color:C.muted }}>{h.name}</span>
                 )}
                 <Tag color={C.navyMid}>{ML[h.market]||"台股"}</Tag>
+                {(() => { const found = STOCK_LIST.find(s=>s.sym===h.symbol); return found?.industry ? <Tag color={C.faint}>{found.industry}</Tag> : null; })()}
               </div>
               <div style={{ fontSize:12, color:C.muted }}>{h.totalShares.toLocaleString()} 股 · 均價 {h.cs}{fmt(h.avgCost)} · {h.lots.length} 批</div>
             </div>
