@@ -168,6 +168,14 @@ export default async function handler(req, res) {
         return;
       }
 
+      // ── Price Debug ──────────────────────────────────────
+      case 'pricedebug': {
+        const date = req.query.date || '20260627';
+        const data = await jFetch(`/equities/bars/daily?code=${code}&date=${date}`);
+        res.status(200).json({ raw: data, keys: data ? Object.keys(data) : [] });
+        return;
+      }
+
       default:
         res.status(400).json({ error: `未知 type: ${type}` });
     }
