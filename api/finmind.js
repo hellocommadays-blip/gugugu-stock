@@ -22,8 +22,8 @@ export default async function handler(req, res) {
 
       // ── 歷史股利（現金股利 + 股票股利）────────────────────
       case 'dividend': {
-        const url = `${BASE}?dataset=TaiwanStockDividend&data_id=${symbol}&token=${TOKEN}`;
-        const r   = await fetch(url);
+        const url = `${BASE}?dataset=TaiwanStockDividend&data_id=${symbol}&start_date=2020-01-01`;
+        const r   = await fetch(url, { headers: { 'Authorization': `Bearer ${TOKEN}` } });
         if (!r.ok) throw new Error(`FinMind ${r.status}`);
         const raw  = await r.json();
         const data = raw?.data || [];
@@ -48,8 +48,8 @@ export default async function handler(req, res) {
 
       // ── 除權息參考價 ────────────────────────────────────────
       case 'exright': {
-        const url = `${BASE}?dataset=TaiwanStockDividendResult&data_id=${symbol}&token=${TOKEN}`;
-        const r   = await fetch(url);
+        const url = `${BASE}?dataset=TaiwanStockDividendResult&data_id=${symbol}&start_date=2020-01-01`;
+        const r   = await fetch(url, { headers: { 'Authorization': `Bearer ${TOKEN}` } });
         if (!r.ok) throw new Error(`FinMind ${r.status}`);
         const raw  = await r.json();
         const data = (raw?.data || [])
