@@ -1285,28 +1285,59 @@ function PortfolioPage({ user, rates={} }) {
   }
 
   // 從 FinMind 拉歷史配息（台股）
+  // 計算某個除息日當時的持有股數
+  function sharesOnDate(lots, exDate) {
+    // 統計在 exDate 之前買入的所有批次的股數總和
+    return lots
+      .filter(l => l.date && l.date <= exDate)
+      .reduce((a, l) => a + (l.shares || 0), 0);
+  }
+
   async function fetchFinMindDividends(symbol) {
     try {
+      // 找到這支股票的持倉批次
+      const holding = holdings.find(h => h.symbol === symbol);
+      if (!holding?.lots?.length) return;
+
       const r = await fetch(`/api/finmind?type=dividend&symbol=${symbol}`);
       const d = await r.json();
       if (!d.success || !d.data?.length) return;
-      // 批次 upsert 到 Supabase
-      const records = d.data.map(div => ({
-        user_id: user.id,
-        symbol,
-        market:   'TW',
-        ex_date:  div.exDate,
-        pay_date: div.payDate || null,
-        amount:   div.cashDiv,
-        shares:   null,
-        total:    null,
-        note:     `FinMind 自動匯入（${div.year}）`,
-      })).filter(r => r.ex_date);
+
+      // 找最早買入日
+      const firstBuyDate = holding.lots
+        .map(l => l.date)
+        .filter(Boolean)
+        .sort()[0];
+
+      // 只保留最早買入日之後的配息
+      const validDivs = d.data.filter(div =>
+        div.exDate && div.cashDiv > 0 && div.exDate >= firstBuyDate
+      );
+
+      if (!validDivs.length) return;
+
+      // 對每筆配息，計算當時持有股數和總金額
+      const records = validDivs.map(div => {
+        const sharesHeld = sharesOnDate(holding.lots, div.exDate);
+        const total = sharesHeld > 0 ? sharesHeld * div.cashDiv : null;
+        return {
+          user_id: user.id,
+          symbol,
+          market:   'TW',
+          ex_date:  div.exDate,
+          pay_date: div.payDate || null,
+          amount:   div.cashDiv,
+          shares:   sharesHeld || null,
+          total,
+          note:     `自動匯入`,
+        };
+      }).filter(r => r.ex_date);
+
       if (records.length) {
-        await supabase.from('dividends').upsert(records, { onConflict: 'user_id,symbol,ex_date', ignoreDuplicates: true });
+        await supabase.from('dividends').upsert(records, { onConflict: 'user_id,symbol,ex_date', ignoreDuplicates: false });
         loadDividends([symbol]);
       }
-    } catch(_) {}
+    } catch(e) { console.error('fetchFinMindDividends error:', e); }
   }
 
   // 載入完持倉後：抓即時價格 + 自動修正名稱
