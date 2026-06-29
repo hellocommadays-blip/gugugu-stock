@@ -504,7 +504,7 @@ function StockPage({ initialQuery='', initialMarket=null, rates={}, onQueryUsed,
                   ⚠️ 日股ADR財務數據以美元計，基準值僅供參考，無法與日圓股價直接比較。
                 </div>
               )}
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:12 }}>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:12 }}>
                 <InnerBox><div style={{ fontSize:13, color:C.navy }}>基準值</div><div style={{ fontSize:16, fontWeight:800, color:C.navy, fontFamily:"monospace" }}>{cs}{fmt(bm)}</div></InnerBox>
                 <InnerBox><div style={{ fontSize:13, color:C.navy }}>調整ROE</div><div style={{ fontSize:16, fontWeight:800, color:C.accent, fontFamily:"monospace" }}>{fmt(stock.adjustedROE)}%</div></InnerBox>
               </div>
@@ -1492,13 +1492,20 @@ function PortfolioPage({ user, rates={} }) {
     const pnl         = currentVal - totalCost;
     const pnlPct      = totalCost > 0 ? (pnl / totalCost) * 100 : 0;
     const cs = CS[h.market] || "NT$";
-    return { ...h, currentPrice, totalShares, totalCost, avgCost, currentVal, pnl, pnlPct, cs };
+    // 含息：累計配息金額
+    const divTotal = (dividends[h.symbol] || []).reduce((a,d) => a + (d.total || 0), 0);
+    const totalReturn    = pnl + divTotal;
+    const totalReturnPct = totalCost > 0 ? (totalReturn / totalCost) * 100 : 0;
+    return { ...h, currentPrice, totalShares, totalCost, avgCost, currentVal, pnl, pnlPct, divTotal, totalReturn, totalReturnPct, cs };
   });
 
-  const totVal  = calced.reduce((a,h)=>a+h.currentVal, 0);
-  const totCost = calced.reduce((a,h)=>a+h.totalCost,  0);
-  const totPnl  = totVal - totCost;
-  const totPct  = totCost > 0 ? (totPnl/totCost)*100 : 0;
+  const totVal       = calced.reduce((a,h)=>a+h.currentVal,    0);
+  const totCost      = calced.reduce((a,h)=>a+h.totalCost,    0);
+  const totPnl       = totVal - totCost;
+  const totPct       = totCost > 0 ? (totPnl/totCost)*100     : 0;
+  const totDiv       = calced.reduce((a,h)=>a+(h.divTotal||0), 0);
+  const totReturn    = totPnl + totDiv;
+  const totReturnPct = totCost > 0 ? (totReturn/totCost)*100  : 0;
 
   const inputStyle = { width:"100%", padding:"10px 12px", borderRadius:10, border:`1.5px solid ${C.border}`, background:C.surface, color:C.navy, fontSize:14, outline:"none", boxSizing:"border-box" };
 
@@ -1515,12 +1522,14 @@ function PortfolioPage({ user, rates={} }) {
       {/* 總覽 */}
       <Card style={{ background:`linear-gradient(135deg,#EAF2FF,#F0F6FF)`, marginBottom:16 }}>
         <SectionLabel>OVERVIEW · 總持倉概覽</SectionLabel>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:12 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:12 }}>
           {[
             ["總市值",     fmtShort(totVal),   C.navy],
             ["總成本",     fmtShort(totCost),  C.navy],
-            ["未實現損益", fmtShort(totPnl),   totPnl>=0?C.up:C.down],
-            ["總報酬率",   fmtPct(totPct),     totPct>=0?C.up:C.down],
+            ["未實現損益", fmtShort(totPnl),      totPnl>=0?C.up:C.down],
+            ["總報酬率",   fmtPct(totPct),        totPct>=0?C.up:C.down],
+            ["含息損益",   fmtShort(totReturn),   totReturn>=0?C.up:C.down],
+            ["含息報酬率", fmtPct(totReturnPct),  totReturnPct>=0?C.up:C.down],
           ].map(([label,val,color])=>(
             <InnerBox key={label} style={{ background:"#fff" }}>
               <div style={{ fontSize:13, color:C.navy }}>{label}</div>
@@ -1586,6 +1595,18 @@ function PortfolioPage({ user, rates={} }) {
               </InnerBox>
             ))}
           </div>
+          {h.divTotal > 0 && (
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:10 }}>
+              <InnerBox>
+                <div style={{ fontSize:12, color:C.muted }}>累計配息</div>
+                <div style={{ fontSize:14, fontWeight:700, color:C.up, fontFamily:"monospace" }}>+{h.cs}{fmt(h.divTotal)}</div>
+              </InnerBox>
+              <InnerBox>
+                <div style={{ fontSize:12, color:C.muted }}>含息報酬率</div>
+                <div style={{ fontSize:14, fontWeight:700, color:h.totalReturnPct>=0?C.up:C.down, fontFamily:"monospace" }}>{fmtPct(h.totalReturnPct)}</div>
+              </InnerBox>
+            </div>
+          )}
 
           <InnerBox style={{ marginBottom:10 }}>
             {/* 標題列：點擊展開/收合 */}
