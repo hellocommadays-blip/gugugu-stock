@@ -276,16 +276,27 @@ function AIAnalysis({ stock, bm, zone, user=null }) {
 不要給買賣建議，只分析現況。`;
 
     try {
+      // 取得用戶 token
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
       const response = await fetch("/api/claude", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ stock, bm, zone }),
       });
 
       const data = await response.json();
+      if (response.status === 429) throw new Error(data.error);
       if (!data.success) throw new Error(data.error || "API 錯誤");
 
       setAnalysis(data.analysis);
+      if (data.remaining !== undefined) {
+        setAnalysis(prev => prev + `\n\n（今日剩餘 ${data.remaining} 次）`);
+      }
       setDone(true);
     } catch (err) {
       setError("AI 巡檢暫時無法使用：" + err.message);
