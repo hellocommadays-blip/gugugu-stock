@@ -49,8 +49,14 @@ export default async function handler(req, res) {
     .eq('user_id', user.id)
     .gte('created_at', `${today}T00:00:00+00:00`);
 
+  // 純查詢剩餘次數，不執行 AI 分析
+  if (req.body?.checkOnly) {
+    res.status(200).json({ remaining: Math.max(0, DAILY_LIMIT - count) });
+    return;
+  }
+
   if (count >= DAILY_LIMIT) {
-    res.status(429).json({ error: `今日 AI 巡檢已達上限（${DAILY_LIMIT} 次），明天再來！` });
+    res.status(429).json({ error: `今日 AI 巡檢已達上限（${DAILY_LIMIT} 次），明天再來！`, remaining: 0 });
     return;
   }
 
