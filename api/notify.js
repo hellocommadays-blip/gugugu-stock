@@ -105,7 +105,10 @@ export default async function handler(req, res) {
 
   try {
     // 從 Supabase 取得所有用戶的自選清單
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+      auth:     { persistSession: false },
+      realtime: { transport: () => null },
+    });
     const { data: watchlist, error: watchlistError } = await supabase
       .from('watchlist')
       .select('symbol, market, name, user_id');
