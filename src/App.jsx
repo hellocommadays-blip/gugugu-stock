@@ -299,10 +299,16 @@ function AIAnalysis({ stock, bm, zone }) {
       <SectionLabel>AI ANALYSIS · 股咕股 AI 巡檢</SectionLabel>
 
       {!analysis && !loading && !error && (
-        <button onClick={runAnalysis}
-          style={{ width:"100%", padding:"12px", borderRadius:12, border:"none", background:`linear-gradient(135deg,#6D28D9,#4A9EFF)`, color:"#fff", fontWeight:700, fontSize:15, cursor:"pointer" }}>
-          🤖 開始 AI 巡檢
-        </button>
+        user ? (
+          <button onClick={runAnalysis}
+            style={{ width:"100%", padding:"12px", borderRadius:12, border:"none", background:`linear-gradient(135deg,#6D28D9,#4A9EFF)`, color:"#fff", fontWeight:700, fontSize:15, cursor:"pointer" }}>
+            🤖 開始 AI 巡檢
+          </button>
+        ) : (
+          <div style={{ textAlign:"center", padding:"12px", borderRadius:12, border:`1.5px dashed ${C.border}`, color:C.muted, fontSize:14 }}>
+            🔒 請先登入才能使用 AI 巡檢
+          </div>
+        )
       )}
 
       {loading && (
@@ -845,6 +851,8 @@ function ScreenerPage({ onSelectStock, user, rates={} }) {
       if (sort === "pb")       return (a.pb || 999) - (b.pb || 999);
       if (sort === "divYield") return (b.divYield || 0) - (a.divYield || 0);
       if (sort === "changePct")return (b.changePct || 0) - (a.changePct || 0);
+      if (sort === "price")    return (a.price || 0) - (b.price || 0);
+      if (sort === "ratio")    return (a.ratio || 0) - (b.ratio || 0);
       return 0;
     });
   }
@@ -918,7 +926,7 @@ function ScreenerPage({ onSelectStock, user, rates={} }) {
         <div style={{ marginBottom:16 }}>
           <div style={{ fontSize:13, color:C.navy, marginBottom:8, fontWeight:600 }}>排序方式</div>
           <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-            {[["zone","估值區間"],["pe","本益比↑"],["pb","淨值比↑"],["divYield","殖利率↓"],["changePct","漲跌幅↓"]].map(([val,label])=>(
+            {[["zone","估值區間"],["pe","本益比↑"],["pb","淨值比↑"],["divYield","殖利率↓"],["changePct","漲跌幅↓"],["price","價格↑"],["ratio","倍率↑"]].map(([val,label])=>(
               <button key={val} onClick={()=>onSortChange(val)}
                 style={{ padding:"5px 12px", borderRadius:20, border:`1.5px solid ${sortBy===val?C.accent:C.border}`, background:sortBy===val?C.accent+"18":"transparent", color:sortBy===val?C.accent:C.muted, fontSize:12, cursor:"pointer", fontWeight:sortBy===val?700:400 }}>
                 {label}
@@ -1653,7 +1661,17 @@ function PortfolioPage({ user, rates={} }) {
               </div>
               <div style={{ fontSize:12, color:C.muted }}>{h.totalShares.toLocaleString()} 股 · 均價 {h.cs}{fmt(h.avgCost)} · {h.lots.length} 批</div>
             </div>
-            <button onClick={()=>deleteHolding(h.symbol)} style={{ fontSize:12, color:C.faint, background:"transparent", border:"none", cursor:"pointer" }}>刪除</button>
+            <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+              <button onClick={async()=>{
+                if (!user) return;
+                const { data } = await supabase.from('watchlist').select('symbol').eq('user_id',user.id).eq('symbol',h.symbol);
+                if (!data?.length) {
+                  await supabase.from('watchlist').insert({ user_id:user.id, symbol:h.symbol, market:h.market, name:h.name });
+                }
+                alert(`${h.symbol} 已加入自選`);
+              }} style={{ fontSize:12, color:C.accent, background:"transparent", border:`1px solid ${C.accent}44`, borderRadius:6, padding:"2px 8px", cursor:"pointer" }}>⭐ 自選</button>
+              <button onClick={()=>deleteHolding(h.symbol)} style={{ fontSize:12, color:C.faint, background:"transparent", border:"none", cursor:"pointer" }}>刪除</button>
+            </div>
           </div>
 
           <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:10 }}>
