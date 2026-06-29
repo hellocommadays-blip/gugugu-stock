@@ -245,10 +245,30 @@ function KLineChart({ history, support, target, currSym }) {
 // AI 巡檢元件
 // ============================================================
 function AIAnalysis({ stock, bm, zone, user=null }) {
-  const [loading,  setLoading]  = useState(false);
-  const [analysis, setAnalysis] = useState("");
-  const [error,    setError]    = useState("");
-  const [done,     setDone]     = useState(false);
+  const [loading,   setLoading]   = useState(false);
+  const [analysis,  setAnalysis]  = useState("");
+  const [error,     setError]     = useState("");
+  const [done,      setDone]      = useState(false);
+  const [remaining, setRemaining] = useState(null); // null=未知, number=剩餘次數
+
+  // 進頁面先查今日剩餘次數
+  useEffect(() => {
+    if (!user) { setRemaining(null); return; }
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (!token) return;
+        const r = await fetch('/api/claude?checkOnly=1', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ checkOnly: true }),
+        });
+        const d = await r.json();
+        if (d.remaining !== undefined) setRemaining(d.remaining);
+      } catch(_) {}
+    })();
+  }, [user, stock?.symbol]);
 
   if (!stock || stock.isETF) return null;
 
@@ -294,9 +314,7 @@ function AIAnalysis({ stock, bm, zone, user=null }) {
       if (!data.success) throw new Error(data.error || "API 錯誤");
 
       setAnalysis(data.analysis);
-      if (data.remaining !== undefined) {
-        setAnalysis(prev => prev + `\n\n（今日剩餘 ${data.remaining} 次）`);
-      }
+      if (data.remaining !== undefined) setRemaining(data.remaining);
       setDone(true);
     } catch (err) {
       setError("AI 巡檢暫時無法使用：" + err.message);
@@ -311,10 +329,23 @@ function AIAnalysis({ stock, bm, zone, user=null }) {
 
       {!analysis && !loading && !error && (
         user ? (
-          <button onClick={runAnalysis}
-            style={{ width:"100%", padding:"12px", borderRadius:12, border:"none", background:`linear-gradient(135deg,#6D28D9,#4A9EFF)`, color:"#fff", fontWeight:700, fontSize:15, cursor:"pointer" }}>
-            🤖 開始 AI 巡檢
-          </button>
+          remaining === 0 ? (
+            <div style={{ textAlign:"center", padding:"12px", borderRadius:12, border:`1.5px dashed ${C.border}`, color:C.muted, fontSize:14 }}>
+              😴 今日 AI 巡檢額度已用完，明天再來看看吧
+            </div>
+          ) : (
+            <>
+              <button onClick={runAnalysis}
+                style={{ width:"100%", padding:"12px", borderRadius:12, border:"none", background:`linear-gradient(135deg,#6D28D9,#4A9EFF)`, color:"#fff", fontWeight:700, fontSize:15, cursor:"pointer" }}>
+                🤖 開始 AI 巡檢
+              </button>
+              {remaining !== null && (
+                <div style={{ textAlign:"center", fontSize:12, color:C.faint, marginTop:6 }}>
+                  今日剩餘 {remaining} 次
+                </div>
+              )}
+            </>
+          )
         ) : (
           <div style={{ textAlign:"center", padding:"12px", borderRadius:12, border:`1.5px dashed ${C.border}`, color:C.muted, fontSize:14 }}>
             🔒 請先登入才能使用 AI 巡檢
@@ -347,10 +378,15 @@ function AIAnalysis({ stock, bm, zone, user=null }) {
             {!done && <span style={{ opacity:0.5 }}>▌</span>}
           </div>
           {done && (
-            <button onClick={()=>{ setAnalysis(""); setDone(false); }} 
-              style={{ fontSize:12, color:C.muted, background:"transparent", border:`1px solid ${C.border}`, borderRadius:8, padding:"4px 12px", cursor:"pointer" }}>
-              重新分析
-            </button>
+            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+              <button onClick={()=>{ setAnalysis(""); setDone(false); }} 
+                style={{ fontSize:12, color:C.muted, background:"transparent", border:`1px solid ${C.border}`, borderRadius:8, padding:"4px 12px", cursor:"pointer" }}>
+                重新分析
+              </button>
+              {remaining !== null && (
+                <span style={{ fontSize:12, color:C.faint }}>今日剩餘 {remaining} 次</span>
+              )}
+            </div>
           )}
         </div>
       )}
