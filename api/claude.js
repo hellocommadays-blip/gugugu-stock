@@ -27,7 +27,10 @@ export default async function handler(req, res) {
   const supabase = createClient(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_SERVICE_KEY,
-    { auth: { persistSession: false } }
+    {
+      auth:     { persistSession: false },
+      realtime: { transport: () => null },
+    }
   );
 
   // 用 token 取得用戶
