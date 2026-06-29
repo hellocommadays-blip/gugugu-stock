@@ -341,7 +341,7 @@ function AIAnalysis({ stock, bm, zone, user=null }) {
               </button>
               {remaining !== null && (
                 <div style={{ textAlign:"center", fontSize:12, color:C.faint, marginTop:6 }}>
-                  今日剩餘 {remaining} 次
+                  每天免費 10 次，今日剩餘 {remaining} 次
                 </div>
               )}
             </>
@@ -384,7 +384,7 @@ function AIAnalysis({ stock, bm, zone, user=null }) {
                 重新分析
               </button>
               {remaining !== null && (
-                <span style={{ fontSize:12, color:C.faint }}>今日剩餘 {remaining} 次</span>
+                <span style={{ fontSize:12, color:C.faint }}>每天免費 10 次，今日剩餘 {remaining} 次</span>
               )}
             </div>
           )}
