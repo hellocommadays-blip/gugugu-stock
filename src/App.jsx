@@ -358,7 +358,7 @@ function AIAnalysis({ stock, bm, zone }) {
 // ============================================================
 // 股票查詢頁
 // ============================================================
-function StockPage({ initialQuery='', initialMarket=null, rates={}, onQueryUsed, onAddWatchlist }) {
+function StockPage({ initialQuery='', initialMarket=null, rates={}, user=null, onQueryUsed, onAddWatchlist }) {
   const [query, setQuery]     = useState(initialQuery);
   const [sugg,  setSugg]      = useState([]);
   const [stock, setStock]     = useState(null);
@@ -2003,7 +2003,7 @@ export default function App() {
 
       {/* Content */}
       <div style={{ maxWidth:960, margin:"0 auto", padding:"18px 14px 40px" }}>
-        {tab==="stock"     && <StockPage initialQuery={stockQuery} initialMarket={stockMarket} rates={rates} onQueryUsed={()=>{ setStockQuery(""); setStockMarket(null); }} onAddWatchlist={async(stock)=>{
+        {tab==="stock"     && <StockPage initialQuery={stockQuery} initialMarket={stockMarket} rates={rates} user={user} onQueryUsed={()=>{ setStockQuery(""); setStockMarket(null); }} onAddWatchlist={async(stock)=>{
           if (!stock) return;
           const sym = stock.symbol; const market = stock.market || "TW"; const name = stock.name || sym;
           if (user) {
