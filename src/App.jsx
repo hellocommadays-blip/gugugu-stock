@@ -1151,45 +1151,87 @@ function WatchlistPage({ user, rates={}, onSelectStock }) {
       ) : list.length === 0 ? (
         <Card><div style={{ textAlign:"center", padding:32, color:C.muted }}>還沒有自選股票，輸入代號開始新增</div></Card>
       ) : (
-        <Card style={{ padding:0, overflow:"hidden" }}>
-          <div style={{ display:"grid", gridTemplateColumns:"80px 1fr 110px 120px 80px 44px", gap:16, padding:"10px 18px", background:C.surface2, fontSize:11, color:C.muted, fontWeight:600 }}>
-            <span>代號</span><span>名稱／產業</span><span style={{ textAlign:"right" }}>現價</span><span style={{ textAlign:"right" }}>台幣</span><span style={{ textAlign:"right" }}>漲跌</span><span></span>
-          </div>
-          {list.map(item => {
-            const p = prices[item.symbol];
-            const name = p?.name || item.name || item.symbol;
-            const market = item.market || detectMarket(item.symbol);
-            const cs = market === "US" ? "$" : market === "JP" ? "¥" : "NT$";
-            return (
-              <div key={item.symbol}
-                style={{ display:"grid", gridTemplateColumns:"80px 1fr 110px 120px 80px 44px", gap:16, padding:"14px 18px", borderBottom:`1px solid ${C.surface2}`, alignItems:"center" }}
-                onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
-                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                <span onClick={()=>onSelectStock&&onSelectStock(item.symbol)}
-                  style={{ fontSize:13, fontWeight:700, color:C.accent, cursor:"pointer" }}>{item.symbol}</span>
-                <div onClick={()=>onSelectStock&&onSelectStock(item.symbol)} style={{ cursor:"pointer", overflow:"hidden" }}>
-                  <div style={{ fontSize:13, color:C.navy, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{name}</div>
-                  {(() => { const found = STOCK_LIST.find(s=>s.sym===item.symbol); return found?.industry ? <div style={{ fontSize:11, color:C.navyMid, marginTop:1 }}>{found.industry}</div> : null; })()}
-                </div>
-                <div style={{ textAlign:"right", fontSize:13, fontWeight:700, color:C.navy, fontFamily:"monospace" }}>
-                  {p ? `${cs}${fmt(p.price)}` : "—"}
-                </div>
-                <div style={{ textAlign:"right", fontSize:13, color:C.navy, fontFamily:"monospace" }}>
-                  {market==='US' && p?.price && rates?.USD?.sell
-                    ? `NT$${fmt(p.price*rates.USD.sell)}`
-                    : "—"}
-                </div>
-                <span style={{ fontSize:12, textAlign:"right", color:p?.changePct>=0?C.up:C.down, fontFamily:"monospace" }}>
-                  {p ? fmtPct(p.changePct) : "—"}
-                </span>
-                <span style={{ textAlign:"right" }}>
-                  <button onClick={()=>removeFromList(item.symbol)}
-                    style={{ fontSize:12, color:C.faint, background:"transparent", border:"none", cursor:"pointer" }}>刪除</button>
-                </span>
+        <>
+          {/* 台股卡片 */}
+          {list.filter(item => (item.market || detectMarket(item.symbol)) === 'TW').length > 0 && (
+            <Card style={{ padding:0, overflow:"hidden", marginBottom:16 }}>
+              <div style={{ padding:"12px 18px", background:C.surface2, fontSize:12, color:C.muted, fontWeight:700, display:"flex", alignItems:"center", gap:6 }}>
+                🇹🇼 台股
               </div>
-            );
-          })}
-        </Card>
+              <div style={{ display:"grid", gridTemplateColumns:"80px 1fr 110px 80px 44px", gap:16, padding:"8px 18px", background:C.surface2, fontSize:11, color:C.faint, fontWeight:600, borderTop:`1px solid ${C.border}` }}>
+                <span>代號</span><span>名稱／產業</span><span style={{ textAlign:"right" }}>現價</span><span style={{ textAlign:"right" }}>漲跌</span><span></span>
+              </div>
+              {list.filter(item => (item.market || detectMarket(item.symbol)) === 'TW').map(item => {
+                const p = prices[item.symbol];
+                const name = p?.name || item.name || item.symbol;
+                return (
+                  <div key={item.symbol}
+                    style={{ display:"grid", gridTemplateColumns:"80px 1fr 110px 80px 44px", gap:16, padding:"14px 18px", borderBottom:`1px solid ${C.surface2}`, alignItems:"center" }}
+                    onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
+                    onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                    <span onClick={()=>onSelectStock&&onSelectStock(item.symbol)}
+                      style={{ fontSize:13, fontWeight:700, color:C.accent, cursor:"pointer" }}>{item.symbol}</span>
+                    <div onClick={()=>onSelectStock&&onSelectStock(item.symbol)} style={{ cursor:"pointer", overflow:"hidden" }}>
+                      <div style={{ fontSize:13, color:C.navy, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{name}</div>
+                      {(() => { const found = STOCK_LIST.find(s=>s.sym===item.symbol); return found?.industry ? <div style={{ fontSize:11, color:C.navyMid, marginTop:1 }}>{found.industry}</div> : null; })()}
+                    </div>
+                    <div style={{ textAlign:"right", fontSize:13, fontWeight:700, color:C.navy, fontFamily:"monospace" }}>
+                      {p ? `NT$${fmt(p.price)}` : "—"}
+                    </div>
+                    <span style={{ fontSize:12, textAlign:"right", color:p?.changePct>=0?C.up:C.down, fontFamily:"monospace" }}>
+                      {p ? fmtPct(p.changePct) : "—"}
+                    </span>
+                    <span style={{ textAlign:"right" }}>
+                      <button onClick={()=>removeFromList(item.symbol)}
+                        style={{ fontSize:12, color:C.faint, background:"transparent", border:"none", cursor:"pointer" }}>刪除</button>
+                    </span>
+                  </div>
+                );
+              })}
+            </Card>
+          )}
+
+          {/* 美股卡片 */}
+          {list.filter(item => (item.market || detectMarket(item.symbol)) === 'US').length > 0 && (
+            <Card style={{ padding:0, overflow:"hidden" }}>
+              <div style={{ padding:"12px 18px", background:C.surface2, fontSize:12, color:C.muted, fontWeight:700, display:"flex", alignItems:"center", gap:6 }}>
+                🇺🇸 美股
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"80px 1fr 110px 120px 80px 44px", gap:16, padding:"8px 18px", background:C.surface2, fontSize:11, color:C.faint, fontWeight:600, borderTop:`1px solid ${C.border}` }}>
+                <span>代號</span><span>名稱／產業</span><span style={{ textAlign:"right" }}>現價</span><span style={{ textAlign:"right" }}>台幣</span><span style={{ textAlign:"right" }}>漲跌</span><span></span>
+              </div>
+              {list.filter(item => (item.market || detectMarket(item.symbol)) === 'US').map(item => {
+                const p = prices[item.symbol];
+                const name = p?.name || item.name || item.symbol;
+                return (
+                  <div key={item.symbol}
+                    style={{ display:"grid", gridTemplateColumns:"80px 1fr 110px 120px 80px 44px", gap:16, padding:"14px 18px", borderBottom:`1px solid ${C.surface2}`, alignItems:"center" }}
+                    onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
+                    onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                    <span onClick={()=>onSelectStock&&onSelectStock(item.symbol)}
+                      style={{ fontSize:13, fontWeight:700, color:C.accent, cursor:"pointer" }}>{item.symbol}</span>
+                    <div onClick={()=>onSelectStock&&onSelectStock(item.symbol)} style={{ cursor:"pointer", overflow:"hidden" }}>
+                      <div style={{ fontSize:13, color:C.navy, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{name}</div>
+                    </div>
+                    <div style={{ textAlign:"right", fontSize:13, fontWeight:700, color:C.navy, fontFamily:"monospace" }}>
+                      {p ? `$${fmt(p.price)}` : "—"}
+                    </div>
+                    <div style={{ textAlign:"right", fontSize:13, color:C.navy, fontFamily:"monospace" }}>
+                      {p?.price && rates?.USD?.sell ? `NT$${fmt(p.price*rates.USD.sell)}` : "—"}
+                    </div>
+                    <span style={{ fontSize:12, textAlign:"right", color:p?.changePct>=0?C.up:C.down, fontFamily:"monospace" }}>
+                      {p ? fmtPct(p.changePct) : "—"}
+                    </span>
+                    <span style={{ textAlign:"right" }}>
+                      <button onClick={()=>removeFromList(item.symbol)}
+                        style={{ fontSize:12, color:C.faint, background:"transparent", border:"none", cursor:"pointer" }}>刪除</button>
+                    </span>
+                  </div>
+                );
+              })}
+            </Card>
+          )}
+        </>
       )}
 
       <div style={{ fontSize:12, color:C.muted, textAlign:"center", padding:"16px 0" }}>
