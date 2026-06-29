@@ -244,7 +244,7 @@ function KLineChart({ history, support, target, currSym }) {
 // ============================================================
 // AI 巡檢元件
 // ============================================================
-function AIAnalysis({ stock, bm, zone }) {
+function AIAnalysis({ stock, bm, zone, user=null }) {
   const [loading,  setLoading]  = useState(false);
   const [analysis, setAnalysis] = useState("");
   const [error,    setError]    = useState("");
@@ -642,7 +642,7 @@ function StockPage({ initialQuery='', initialMarket=null, rates={}, user=null, o
           </Card>
 
           {/* AI 巡檢 */}
-          <AIAnalysis stock={stock} bm={bm} zone={zone} />
+          <AIAnalysis stock={stock} bm={bm} zone={zone} user={user} />
 
           <div style={{ fontSize:12, color:C.muted, textAlign:"center", padding:"4px 0 12px" }}>
             <span className="desktop-notice">
