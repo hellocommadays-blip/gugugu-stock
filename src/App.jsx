@@ -1598,7 +1598,7 @@ export default function App() {
         <div style={{ maxWidth:960, margin:"0 auto" }}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
             <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-              <img src="/logo.png" alt="股咕股" style={{ width:36, height:36, borderRadius:"50%" }} />
+              <img src="/logo.png" alt="股咕股" style={{ width:48, height:48, borderRadius:14, objectFit:"cover" }} />
               <div>
                 <div style={{ fontSize:18, fontWeight:900, background:`linear-gradient(90deg,${C.accentDark},${C.accent})`, WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>全民股咕股</div>
                 <div style={{ fontSize:12, color:C.muted }}>台美日股 AI 巡檢助理</div>
