@@ -8,6 +8,7 @@ const SUPABASE_KEY    = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE
 // Service Key 可繞過 RLS，讀取所有用戶的 watchlist
 const TG_TOKEN        = process.env.TELEGRAM_BOT_TOKEN;
 const TG_CHAT_ID      = process.env.TELEGRAM_CHAT_ID;
+const LINE_TOKEN      = process.env.LINE_CHANNEL_ACCESS_TOKEN;
 
 // 估值區間
 function calcZone(price, bm) {
@@ -89,6 +90,32 @@ async function sendTelegram(msg) {
   });
 }
 
+// LINE 用純文字（broadcast 給所有啟用中的訂閱者）
+async function sendLineBroadcast(msg) {
+  if (!LINE_TOKEN) return;
+  try {
+    await fetch('https://api.line.me/v2/bot/message/broadcast', {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${LINE_TOKEN}`,
+      },
+      body: JSON.stringify({
+        messages: [{ type: 'text', text: msg }],
+      }),
+    });
+  } catch (err) {
+    console.error('LINE broadcast error:', err.message);
+  }
+}
+
+// 把 HTML 訊息轉成 LINE 純文字版
+function toPlainText(htmlMsg) {
+  return htmlMsg
+    .replace(/<b>/g, '').replace(/<\/b>/g, '')
+    .replace(/<a href="([^"]+)">([^<]+)<\/a>/g, '$2 $1');
+}
+
 export default async function handler(req, res) {
   // 安全驗證（暫時關閉，測試用）
   // const authHeader = req.headers['authorization'];
@@ -156,12 +183,13 @@ export default async function handler(req, res) {
       const now = new Date();
       now.setHours(now.getHours() + 8);
       const dateStr = `${now.getMonth()+1}/${now.getDate()}`;
-      await sendTelegram(
+      const peaceMsg =
         `🕊️ <b>股咕股雷達 ${dateStr}</b>\n\n` +
         `✅ 自選清單 ${unique.length} 檔巡檢完畢\n` +
         `目前無需特別關注的標的，持續監控中。\n\n` +
-        `<a href="https://gugugu-stock.vercel.app">→ 前往股咕股</a>`
-      );
+        `<a href="https://gugugu-stock.vercel.app">→ 前往股咕股</a>`;
+      await sendTelegram(peaceMsg);
+      await sendLineBroadcast(toPlainText(peaceMsg));
     } else {
       // 發送警示訊息
       const now = new Date();
@@ -180,6 +208,7 @@ export default async function handler(req, res) {
 
       msg += `<a href="https://gugugu-stock.vercel.app">→ 前往股咕股查看</a>`;
       await sendTelegram(msg);
+      await sendLineBroadcast(toPlainText(msg));
     }
 
     res.status(200).json({
