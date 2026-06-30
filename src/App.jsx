@@ -1846,6 +1846,100 @@ function PortfolioPage({ user, rates={} }) {
 }
 
 // ============================================================
+// 產業動態頁
+// ============================================================
+function NewsPage() {
+  const [data, setData]       = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState("");
+
+  useEffect(() => {
+    loadLatest();
+  }, []);
+
+  async function loadLatest() {
+    setLoading(true); setError("");
+    try {
+      const r = await fetch('/api/news?latest=1');
+      const d = await r.json();
+      if (d.success) setData(d.data);
+      else setError("無法載入新聞分析");
+    } catch (err) {
+      setError("載入失敗：" + err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // 把 markdown 簡單轉換成排版（標題、粗體、表格列）
+  function renderAnalysis(text) {
+    if (!text) return null;
+    const lines = text.split('\n');
+    return lines.map((line, i) => {
+      // 表格列跳過渲染原始符號，簡化處理
+      if (line.startsWith('|')) {
+        return <div key={i} style={{ fontSize:13, color:C.navy, padding:"4px 0", borderBottom:`1px solid ${C.border}` }}>{line.replace(/\|/g, '  ').trim()}</div>;
+      }
+      if (line.startsWith('#')) {
+        const text2 = line.replace(/^#+\s*/, '');
+        return <div key={i} style={{ fontSize:16, fontWeight:800, color:C.navy, marginTop:i>0?16:0, marginBottom:8 }}>{text2}</div>;
+      }
+      if (line.trim() === '---') {
+        return <div key={i} style={{ borderTop:`1px solid ${C.border}`, margin:"10px 0" }} />;
+      }
+      // **粗體**處理
+      const parts = line.split(/\*\*([^*]+)\*\*/g);
+      return (
+        <div key={i} style={{ fontSize:14, color:C.navy, lineHeight:1.8, marginBottom: line.trim()===''?6:0 }}>
+          {parts.map((p, j) => j % 2 === 1 ? <strong key={j}>{p}</strong> : <span key={j}>{p}</span>)}
+        </div>
+      );
+    });
+  }
+
+  return (
+    <div>
+      <Card style={{ marginBottom:16 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <SectionLabel>NEWS · 產業動態分析</SectionLabel>
+          <button onClick={loadLatest} disabled={loading}
+            style={{ fontSize:12, color:C.accent, background:"transparent", border:`1px solid ${C.accent}44`, borderRadius:8, padding:"4px 10px", cursor:"pointer" }}>
+            {loading ? "載入中⋯" : "🔄 重新整理"}
+          </button>
+        </div>
+        <div style={{ fontSize:12, color:C.faint, marginTop:6 }}>
+          每日開盤前、收盤後自動更新，AI 整理當日重點財經新聞並分析對自選股的潛在影響
+        </div>
+      </Card>
+
+      {loading && (
+        <Card><div style={{ textAlign:"center", padding:40, color:C.muted }}><div style={{ fontSize:32 }}>📰</div><div>載入中⋯</div></div></Card>
+      )}
+
+      {error && (
+        <Card><div style={{ textAlign:"center", padding:32, color:C.down }}>{error}</div></Card>
+      )}
+
+      {!loading && !error && !data && (
+        <Card><div style={{ textAlign:"center", padding:32, color:C.muted }}>尚無新聞分析資料，請稍候系統自動更新</div></Card>
+      )}
+
+      {!loading && data && (
+        <Card>
+          <div style={{ fontSize:12, color:C.faint, marginBottom:12 }}>
+            更新時間：{new Date(data.created_at).toLocaleString('zh-TW', { timeZone:'Asia/Taipei' })}
+          </div>
+          {renderAnalysis(data.analysis)}
+          <div style={{ fontSize:11, color:C.faint, marginTop:16, paddingTop:12, borderTop:`1px solid ${C.border}` }}>
+            ⚠️ 新聞分析僅供參考，不構成投資建議
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
 // 登入 Modal（接 Supabase）
 // ============================================================
 function LoginModal({ onClose, onLogin }) {
@@ -1950,6 +2044,7 @@ export default function App() {
     { id:"screener",  label:"📊 選股" },
     { id:"watchlist", label:"⭐ 自選組合" },
     { id:"portfolio", label:"💼 持倉" },
+    { id:"news",      label:"📰 產業動態" },
   ];
 
   return (
@@ -2007,6 +2102,7 @@ export default function App() {
         {tab==="screener"  && <ScreenerPage onSelectStock={(sym, mkt)=>{ setStockQuery(sym); setStockMarket(mkt||null); setTab("stock"); }} user={user} rates={rates} />}
         {tab==="watchlist" && <WatchlistPage user={user} rates={rates} onSelectStock={sym=>{ setStockQuery(sym); setTab("stock"); }} />}
         {tab==="portfolio" && <PortfolioPage user={user} rates={rates} />}
+        {tab==="news"      && <NewsPage />}
       </div>
     </div>
   );
