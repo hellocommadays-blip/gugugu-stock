@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { createClient } from "@supabase/supabase-js";
-import { STOCK_LIST, SCREENER_US_DEDUP, SCREENER_JP } from "./stockList.js";
+import { STOCK_LIST, SCREENER_US_DEDUP } from "./stockList.js";
 
 // ============================================================
 // Supabase 客戶端
@@ -53,11 +53,6 @@ function calcZone(price, benchmark) {
   if (ratio < 2.00) return { zone: "高估區",   color: C.z4, ratio };
   return               { zone: "泡沫區",   color: C.z5, ratio };
 }
-
-// ============================================================
-// Mock 資料（自動補全用）
-// ============================================================
-// STOCK_LIST 從 stockList.js 匯入
 
 const CS = { TWD:"NT$", USD:"$", JPY:"¥" };
 const ML = { TW:"台股", US:"美股", JP:"日股" };
@@ -141,7 +136,8 @@ async function fetchStock(sym, forceMarket=null) {
 
     return {
       symbol: cleanSym, name: q.name, market: mkt,
-      currency: mkt==="JP" ? "USD" : (q.currency || "USD"),  // 日股ADR以USD計價 isETF: false,
+      currency: mkt==="JP" ? "USD" : (q.currency || "USD"),  // 日股ADR以USD計價
+      isETF: false,
       price: q.price, change: q.change, changePct: q.changePct,
       open: q.open, high: q.high, low: q.low, prevClose: q.prevClose,
       pe: fin?.pe||null, pb: fin?.pb||null, dividendYield: fin?.dividendYield||null,
@@ -244,11 +240,30 @@ function KLineChart({ history, support, target, currSym }) {
 // ============================================================
 // AI 巡檢元件
 // ============================================================
-function AIAnalysis({ stock, bm, zone }) {
-  const [loading,  setLoading]  = useState(false);
-  const [analysis, setAnalysis] = useState("");
-  const [error,    setError]    = useState("");
-  const [done,     setDone]     = useState(false);
+function AIAnalysis({ stock, bm, zone, user=null }) {
+  const [loading,   setLoading]   = useState(false);
+  const [analysis,  setAnalysis]  = useState("");
+  const [error,     setError]     = useState("");
+  const [done,      setDone]      = useState(false);
+  const [remaining, setRemaining] = useState(null);
+
+  useEffect(() => {
+    if (!user) { setRemaining(null); return; }
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (!token) return;
+        const r = await fetch('/api/claude?checkOnly=1', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ checkOnly: true }),
+        });
+        const d = await r.json();
+        if (d.remaining !== undefined) setRemaining(d.remaining);
+      } catch(_) {}
+    })();
+  }, [user, stock?.symbol]);
 
   if (!stock || stock.isETF) return null;
 
@@ -276,16 +291,24 @@ function AIAnalysis({ stock, bm, zone }) {
 不要給買賣建議，只分析現況。`;
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
       const response = await fetch("/api/claude", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ stock, bm, zone }),
       });
 
       const data = await response.json();
+      if (response.status === 429) throw new Error(data.error);
       if (!data.success) throw new Error(data.error || "API 錯誤");
 
       setAnalysis(data.analysis);
+      if (data.remaining !== undefined) setRemaining(data.remaining);
       setDone(true);
     } catch (err) {
       setError("AI 巡檢暫時無法使用：" + err.message);
@@ -299,10 +322,29 @@ function AIAnalysis({ stock, bm, zone }) {
       <SectionLabel>AI ANALYSIS · 股咕股 AI 巡檢</SectionLabel>
 
       {!analysis && !loading && !error && (
-        <button onClick={runAnalysis}
-          style={{ width:"100%", padding:"12px", borderRadius:12, border:"none", background:`linear-gradient(135deg,#6D28D9,#4A9EFF)`, color:"#fff", fontWeight:700, fontSize:15, cursor:"pointer" }}>
-          🤖 開始 AI 巡檢
-        </button>
+        user ? (
+          remaining === 0 ? (
+            <div style={{ textAlign:"center", padding:"12px", borderRadius:12, border:`1.5px dashed ${C.border}`, color:C.muted, fontSize:14 }}>
+              😴 今日 AI 巡檢額度已用完，明天再來看看吧
+            </div>
+          ) : (
+            <>
+              <button onClick={runAnalysis}
+                style={{ width:"100%", padding:"12px", borderRadius:12, border:"none", background:`linear-gradient(135deg,#6D28D9,#4A9EFF)`, color:"#fff", fontWeight:700, fontSize:15, cursor:"pointer" }}>
+                🤖 開始 AI 巡檢
+              </button>
+              {remaining !== null && (
+                <div style={{ textAlign:"center", fontSize:12, color:C.faint, marginTop:6 }}>
+                  每天免費 10 次，今日剩餘 {remaining} 次
+                </div>
+              )}
+            </>
+          )
+        ) : (
+          <div style={{ textAlign:"center", padding:"12px", borderRadius:12, border:`1.5px dashed ${C.border}`, color:C.muted, fontSize:14 }}>
+            🔒 請先登入才能使用 AI 巡檢
+          </div>
+        )
       )}
 
       {loading && (
@@ -314,15 +356,30 @@ function AIAnalysis({ stock, bm, zone }) {
 
       {analysis && (
         <div>
-          <div style={{ fontSize:14, color:C.navy, lineHeight:1.8, whiteSpace:"pre-wrap", marginBottom:12 }}>
-            {analysis}
+          <div style={{ fontSize:14, color:C.navy, lineHeight:1.8, marginBottom:12 }}>
+            {analysis.split('\n').map((line, i) => {
+              const parts = line.split(/\*\*([^*]+)\*\*/g);
+              return (
+                <div key={i} style={{ marginBottom: line === '' ? 8 : 0 }}>
+                  {parts.map((p, j) => j % 2 === 1
+                    ? <strong key={j}>{p}</strong>
+                    : <span key={j}>{p}</span>
+                  )}
+                </div>
+              );
+            })}
             {!done && <span style={{ opacity:0.5 }}>▌</span>}
           </div>
           {done && (
-            <button onClick={()=>{ setAnalysis(""); setDone(false); }} 
-              style={{ fontSize:12, color:C.muted, background:"transparent", border:`1px solid ${C.border}`, borderRadius:8, padding:"4px 12px", cursor:"pointer" }}>
-              重新分析
-            </button>
+            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+              <button onClick={()=>{ setAnalysis(""); setDone(false); }} 
+                style={{ fontSize:12, color:C.muted, background:"transparent", border:`1px solid ${C.border}`, borderRadius:8, padding:"4px 12px", cursor:"pointer" }}>
+                重新分析
+              </button>
+              {remaining !== null && (
+                <span style={{ fontSize:12, color:C.faint }}>每天免費 10 次，今日剩餘 {remaining} 次</span>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -341,14 +398,13 @@ function AIAnalysis({ stock, bm, zone }) {
 // ============================================================
 // 股票查詢頁
 // ============================================================
-function StockPage({ initialQuery='', initialMarket=null, onQueryUsed, onAddWatchlist }) {
+function StockPage({ initialQuery='', initialMarket=null, rates={}, user=null, onQueryUsed, onAddWatchlist }) {
   const [query, setQuery]     = useState(initialQuery);
   const [sugg,  setSugg]      = useState([]);
   const [stock, setStock]     = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState("");
 
-  // 跨頁籤查詢觸發
   useEffect(() => {
     if (initialQuery) {
       search(initialQuery, initialMarket);
@@ -370,7 +426,6 @@ function StockPage({ initialQuery='', initialMarket=null, onQueryUsed, onAddWatc
   function select(item) {
     const sym = item.sym;
     setQuery(sym); setSugg([]);
-    // 日股傳入 market=JP，讓 fetchStock 知道是日股
     searchWithMarket(sym, item.market);
   }
 
@@ -391,7 +446,6 @@ function StockPage({ initialQuery='', initialMarket=null, onQueryUsed, onAddWatc
   async function search(s, forceMarket=null) {
     const sym = (s||query).trim().toUpperCase();
     if (!sym) return;
-    // 從 STOCK_LIST 找看有沒有對應的 market
     const found = STOCK_LIST.find(i => i.sym === sym);
     await searchWithMarket(sym, forceMarket || found?.market || null);
   }
@@ -438,7 +492,6 @@ function StockPage({ initialQuery='', initialMarket=null, onQueryUsed, onAddWatc
             </div>
           )}
 
-          {/* 報價卡 */}
           <Card>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", flexWrap:"wrap", gap:12, marginBottom:16 }}>
               <div>
@@ -450,6 +503,9 @@ function StockPage({ initialQuery='', initialMarket=null, onQueryUsed, onAddWatc
                   {stock.market==="JP" && stock.isADR && <Tag color="#7C3AED">ADR</Tag>}
                 </div>
                 <div style={{ fontSize:34, fontWeight:900, color:C.navy, fontFamily:"monospace", letterSpacing:-1 }}>{cs}{fmt(stock.price)}</div>
+                {stock.market==='US' && rates?.USD?.sell && (
+                  <div style={{ fontSize:16, color:C.navy, marginTop:2, fontFamily:"monospace" }}>NT${fmt(stock.price * rates.USD.sell)}</div>
+                )}
                 <div style={{ fontSize:15, marginTop:4, color:stock.change>=0?C.up:C.down, fontWeight:600 }}>
                   {stock.change>=0?"▲":"▼"} {Math.abs(stock.change).toFixed(2)} ({fmtPct(stock.changePct)})
                 </div>
@@ -481,7 +537,6 @@ function StockPage({ initialQuery='', initialMarket=null, onQueryUsed, onAddWatc
             {bm && !stock.isETF && <ValuationBar price={stock.price} benchmark={bm} />}
           </Card>
 
-          {/* 基準值區間 */}
           {bm && !stock.isETF && (
             <Card>
               <SectionLabel>PRICE BANDS · 價格基準值</SectionLabel>
@@ -517,7 +572,6 @@ function StockPage({ initialQuery='', initialMarket=null, onQueryUsed, onAddWatc
             </Card>
           )}
 
-          {/* 價格訊號 */}
           <Card>
             <SectionLabel>SIGNALS · 價格訊號</SectionLabel>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
@@ -546,10 +600,8 @@ function StockPage({ initialQuery='', initialMarket=null, onQueryUsed, onAddWatc
             </div>
           </Card>
 
-          {/* K線圖 */}
           <Card><KLineChart history={stock.history} support={stock.support} target={stock.target} currSym={cs} /></Card>
 
-          {/* 三大法人 */}
           {stock.inst && (
             <Card>
               <SectionLabel>INSTITUTIONAL · 三大法人（最新交易日）</SectionLabel>
@@ -573,7 +625,6 @@ function StockPage({ initialQuery='', initialMarket=null, onQueryUsed, onAddWatc
             </Card>
           )}
 
-          {/* 融資融券 */}
           {stock.margin && (
             <Card>
               <SectionLabel>MARGIN · 融資融券（最新交易日）</SectionLabel>
@@ -601,7 +652,6 @@ function StockPage({ initialQuery='', initialMarket=null, onQueryUsed, onAddWatc
             </Card>
           )}
 
-          {/* 財務健康 */}
           <Card>
             <SectionLabel>FINANCIALS · 財務健康</SectionLabel>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
@@ -621,11 +671,15 @@ function StockPage({ initialQuery='', initialMarket=null, onQueryUsed, onAddWatc
             </div>
           </Card>
 
-          {/* AI 巡檢 */}
-          <AIAnalysis stock={stock} bm={bm} zone={zone} />
+          <AIAnalysis stock={stock} bm={bm} zone={zone} user={user} />
 
           <div style={{ fontSize:12, color:C.muted, textAlign:"center", padding:"4px 0 12px" }}>
-            🕊️「股咕股」溫馨提示：本工具僅為個人開發之數據整合與指標分析統計，並非提供任何形式的投資買賣建議。市場有風險，投資需謹慎，「股咕股」只負責啼叫報時，盈虧請用戶自負。
+            <span className="desktop-notice">
+              🕊️「股咕股」溫馨提示：本工具僅為個人開發之數據整合與指標分析統計，<br/>並非提供任何形式的投資買賣建議。市場有風險，投資需謹慎，盈虧請用戶自負。
+            </span>
+            <span className="mobile-notice">
+              本工具僅供參考，不構成投資建議。<br/>市場有風險，盈虧請用戶自負。
+            </span>
           </div>
         </div>
       )}
@@ -634,10 +688,10 @@ function StockPage({ initialQuery='', initialMarket=null, onQueryUsed, onAddWatc
 }
 
 // ============================================================
-// 選股頁（台股 + 美股 + 日股）
+// 選股頁（台股 + 美股）
 // ============================================================
-function ScreenerPage({ onSelectStock }) {
-  const [market,       setMarket]       = useState("TW"); // TW | US | JP
+function ScreenerPage({ onSelectStock, user, rates={} }) {
+  const [market,       setMarket]       = useState("TW");
   const [selectedZone, setSelectedZone] = useState("全部");
   const [results,      setResults]      = useState([]);
   const [allResults,   setAllResults]   = useState([]);
@@ -645,7 +699,6 @@ function ScreenerPage({ onSelectStock }) {
   const [ran,          setRan]          = useState(false);
   const [dataDate,     setDataDate]     = useState("");
   const [sortBy,       setSortBy]       = useState("zone");
-  // 美/日股掃描進度
   const [scanProgress, setScanProgress] = useState({ done:0, total:0 });
   const [scanLog,      setScanLog]      = useState("");
 
@@ -653,7 +706,6 @@ function ScreenerPage({ onSelectStock }) {
   const zoneColor = { "極低估區":C.z0,"低估區":C.z1,"合理區":C.z2,"偏高區":C.z3,"高估區":C.z4,"泡沫區":C.z5 };
   const zoneOrder = { "極低估區":0,"低估區":1,"合理區":2,"偏高區":3,"高估區":4,"泡沫區":5 };
 
-  // 市場切換時重置結果
   function switchMarket(m) {
     setMarket(m);
     setRan(false);
@@ -665,7 +717,6 @@ function ScreenerPage({ onSelectStock }) {
     setScanLog("");
   }
 
-  // ── 台股掃描（TWSE API）──────────────────────────────────
   async function runTW() {
     setLoading(true); setRan(true);
     try {
@@ -683,14 +734,13 @@ function ScreenerPage({ onSelectStock }) {
     }
   }
 
-  // ── 美/日股掃描（Finnhub，逐批控速）────────────────────────
   async function runForeign(stockList, mkt) {
     setLoading(true); setRan(true);
     setScanProgress({ done:0, total:stockList.length });
     setScanLog("");
 
-    const BATCH     = 5;   // 每批 5 檔同時查
-    const DELAY_MS  = 500; // 批次間等 0.5 秒（Yahoo 無限速，Finnhub quote ~60req/min）
+    const BATCH     = 5;
+    const DELAY_MS  = 500;
     const collected = [];
 
     for (let i = 0; i < stockList.length; i += BATCH) {
@@ -709,8 +759,6 @@ function ScreenerPage({ onSelectStock }) {
               return r.json().catch(() => null);
             } catch (_) { return null; }
           };
-          // quote + financials 用 Finnhub（精選支援清單）
-          // 日股ADR 在美掛牌，用 market=US 查
           const fhMkt = mkt === 'JP' ? 'US' : mkt;
           const [quoteRes, finRes] = await Promise.all([
             safeFetch(`/api/finnhub?symbol=${s.sym}&market=${fhMkt}&type=quote`),
@@ -749,7 +797,6 @@ function ScreenerPage({ onSelectStock }) {
       batchResults.forEach(r => r && collected.push(r));
       setScanProgress(p => ({ ...p, done: Math.min(i + BATCH, stockList.length) }));
 
-      // 即時更新結果（邊掃邊顯示）
       const sorted = sortItems([...collected], sortBy);
       setAllResults([...collected]);
       setResults(selectedZone === "全部" ? sorted : sorted.filter(s=>s.zone===selectedZone));
@@ -767,87 +814,55 @@ function ScreenerPage({ onSelectStock }) {
     setSelectedZone("全部");
     if (market === "TW") {
       runTW();
-    } else if (market === "US") {
-      runForeign(SCREENER_US_DEDUP, "US");
     } else {
-      runJP();
+      runUS();
     }
   }
 
-  // ── 日股選股（J-Quants，東証代號）───────────────────────
-  async function runJP() {
-    setLoading(true); setRan(true);
-    setScanProgress({ done:0, total:SCREENER_JP.length });
-    setScanLog("連接 J-Quants API...");
-
-    const BATCH    = 3;
-    const DELAY_MS = 800;
-    const collected = [];
-
-    for (let i = 0; i < SCREENER_JP.length; i += BATCH) {
-      const batch = SCREENER_JP.slice(i, i + BATCH);
-      setScanLog(`掃描：${batch.map(s=>s.name).join("、")}`);
-
-      const batchResults = await Promise.all(batch.map(async (s) => {
-        try {
-          const safeFetch = async (url) => {
-            try {
-              const controller = new AbortController();
-              const timer = setTimeout(() => controller.abort(), 9000);
-              const r = await fetch(url, { signal: controller.signal });
-              clearTimeout(timer);
-              if (!r.ok) return null;
-              return r.json().catch(() => null);
-            } catch (_) { return null; }
-          };
-          const [priceRes, finRes] = await Promise.all([
-            safeFetch(`/api/jquants?type=price&code=${s.code}`),
-            safeFetch(`/api/jquants?type=financials&code=${s.code}`),
-          ]);
-          if (!priceRes?.success) return null;
-          const q   = priceRes.data;
-          const fin = finRes?.success ? finRes.data : null;
-
-          const adjustedROE            = fin?.adjustedROE            || null;
-          const adjustedEquityPerShare = fin?.adjustedEquityPerShare || null;
-          const bm  = (adjustedEquityPerShare && adjustedROE)
-            ? adjustedEquityPerShare * (adjustedROE / 100) * 10
-            : null;
-          const zoneInfo = bm ? calcZone(q.price, bm) : null;
-
-          return {
-            symbol:    s.code,
-            name:      s.name,
-            industry:  s.industry || "—",
-            market:    "JP",
-            price:     q.price,
-            changePct: q.changePct,
-            pe:        null,
-            pb:        null,
-            divYield:  null,
-            adjustedROE,
-            adjustedEquityPerShare,
-            bm,
-            zone:  zoneInfo?.zone  || "—",
-            ratio: zoneInfo?.ratio || null,
-          };
-        } catch(_) { return null; }
-      }));
-
-      batchResults.forEach(r => r && collected.push(r));
-      setScanProgress(p => ({ ...p, done: Math.min(i + BATCH, SCREENER_JP.length) }));
-
-      const sorted = sortItems([...collected], sortBy);
-      setAllResults([...collected]);
-      setResults(selectedZone === "全部" ? sorted : sorted.filter(s=>s.zone===selectedZone));
-
-      if (i + BATCH < SCREENER_JP.length) {
-        await new Promise(r => setTimeout(r, DELAY_MS));
+  async function runUS() {
+    setLoading(true); setRan(true); setScanLog("");
+    try {
+      const { data, error } = await supabase
+        .from('stocks_cache')
+        .select('*')
+        .eq('market', 'US')
+        .order('symbol');
+      if (error) throw new Error(error.message);
+      if (!data?.length) {
+        setScanLog("資料庫無快取，改為即時掃描...");
+        setLoading(false);
+        runForeign(SCREENER_US_DEDUP, "US");
+        return;
       }
+      const mapped = data.map(s => ({
+        symbol:    s.symbol,
+        name:      s.name,
+        industry:  s.industry || "—",
+        market:    'US',
+        price:     s.price,
+        changePct: s.change_pct,
+        pe:        s.pe,
+        pb:        s.pb,
+        divYield:  s.div_yield,
+        adjustedROE:            s.roe,
+        adjustedEquityPerShare: s.bps,
+        bm:        s.bm,
+        zone:      s.zone || "—",
+        ratio:     s.ratio,
+      }));
+      if (data[0]?.updated_at) {
+        const d = new Date(data[0].updated_at);
+        d.setHours(d.getHours() + 8);
+        setDataDate(d.toISOString().slice(0,10).replace(/-/g,'/'));
+      }
+      setAllResults(mapped);
+      filterAndSort(mapped, selectedZone, sortBy);
+    } catch (err) {
+      setScanLog("讀取失敗，改為即時掃描...");
+      runForeign(SCREENER_US_DEDUP, "US");
+    } finally {
+      setLoading(false);
     }
-
-    setScanLog("");
-    setLoading(false);
   }
 
   function sortItems(data, sort) {
@@ -857,6 +872,8 @@ function ScreenerPage({ onSelectStock }) {
       if (sort === "pb")       return (a.pb || 999) - (b.pb || 999);
       if (sort === "divYield") return (b.divYield || 0) - (a.divYield || 0);
       if (sort === "changePct")return (b.changePct || 0) - (a.changePct || 0);
+      if (sort === "price")    return (a.price || 0) - (b.price || 0);
+      if (sort === "ratio")    return (a.ratio || 0) - (b.ratio || 0);
       return 0;
     });
   }
@@ -876,23 +893,17 @@ function ScreenerPage({ onSelectStock }) {
     filterAndSort(allResults, selectedZone, s);
   }
 
-  const isTW    = market === "TW";
   const scanPct = scanProgress.total > 0
     ? Math.round((scanProgress.done / scanProgress.total) * 100)
     : 0;
 
-  // 市場對應的貨幣符號
-  const mktCS = { TW:"NT$", US:"$", JP:"¥" };
-  const cs = mktCS[market];
-
   return (
     <div>
       <Card style={{ marginBottom:16 }}>
-        {/* 市場切換 */}
         <div style={{ marginBottom:16 }}>
           <SectionLabel>選擇市場</SectionLabel>
           <div style={{ display:"flex", gap:8 }}>
-            {[["TW","🇹🇼 台股"],["US","🇺🇸 美股"],["JP","🇯🇵 日股ADR"]].map(([m, label]) => (
+            {[["TW","🇹🇼 台股"],["US","🇺🇸 美股"]].map(([m, label]) => (
               <button key={m} onClick={()=>switchMarket(m)}
                 style={{ flex:1, padding:"10px 8px", borderRadius:12, border:`2px solid ${market===m?C.accent:C.border}`, background:market===m?C.accent+"14":"transparent", color:market===m?C.accent:C.muted, fontWeight:market===m?700:400, fontSize:13, cursor:"pointer" }}>
                 {label}
@@ -902,14 +913,13 @@ function ScreenerPage({ onSelectStock }) {
           {market !== "TW" && (
             <div style={{ fontSize:11, color:C.faint, marginTop:8, lineHeight:1.6 }}>
               {market === "US"
-                ? `⚡ 掃描 ${SCREENER_US_DEDUP.length} 檔美股（S&P 500核心 + 熱門科技）。Finnhub 免費版有速率限制，約需 ${Math.ceil(SCREENER_US_DEDUP.length/4)*1}–${Math.ceil(SCREENER_US_DEDUP.length/4)*1+1} 分鐘，掃描中可即時看到已完成的結果。`
-                : `⚡ 掃描 ${SCREENER_JP.length} 檔日股ADR（日經225主要成分）。ADR 以美元計價，估值基準值為美元數字，供相對比較用。`
+                ? `⚡ 美股資料每日自動更新，共 ${allResults.length > 0 ? allResults.length : "100+"} 檔，即點即看。`
+                : null
               }
             </div>
           )}
         </div>
 
-        {/* 估值區間篩選 */}
         <div style={{ marginBottom:12 }}>
           <div style={{ fontSize:13, color:C.navy, marginBottom:8, fontWeight:600 }}>估值區間</div>
           <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
@@ -926,11 +936,10 @@ function ScreenerPage({ onSelectStock }) {
           </div>
         </div>
 
-        {/* 排序 */}
         <div style={{ marginBottom:16 }}>
           <div style={{ fontSize:13, color:C.navy, marginBottom:8, fontWeight:600 }}>排序方式</div>
           <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-            {[["zone","估值區間"],["pe","本益比↑"],["pb","淨值比↑"],["divYield","殖利率↓"],["changePct","漲跌幅↓"]].map(([val,label])=>(
+            {[["zone","估值區間"],["pe","本益比↑"],["pb","淨值比↑"],["divYield","殖利率↓"],["changePct","漲跌幅↓"],["price","價格↑"],["ratio","倍率↑"]].map(([val,label])=>(
               <button key={val} onClick={()=>onSortChange(val)}
                 style={{ padding:"5px 12px", borderRadius:20, border:`1.5px solid ${sortBy===val?C.accent:C.border}`, background:sortBy===val?C.accent+"18":"transparent", color:sortBy===val?C.accent:C.muted, fontSize:12, cursor:"pointer", fontWeight:sortBy===val?700:400 }}>
                 {label}
@@ -942,12 +951,11 @@ function ScreenerPage({ onSelectStock }) {
         <button onClick={run} disabled={loading}
           style={{ width:"100%", padding:"12px", borderRadius:12, border:"none", background:`linear-gradient(135deg,${C.accentDark},${C.accent})`, color:"#fff", fontWeight:700, fontSize:15, cursor:"pointer", opacity:loading?0.7:1 }}>
           {loading
-            ? (market==="TW" ? "掃描台股中⋯" : `掃描中 ${scanProgress.done}/${scanProgress.total}（${scanPct}%）`)
-            : `執行選股 · ${market==="TW"?"台股上市":market==="US"?"美股S&P500+":"日股ADR"}`
+            ? (market==="TW" ? "掃描台股中⋯" : "讀取中⋯")
+            : `執行選股 · ${market==="TW"?"台股上市":"美股精選"}`
           }
         </button>
 
-        {/* 美/日股進度條 */}
         {loading && market !== "TW" && scanProgress.total > 0 && (
           <div style={{ marginTop:12 }}>
             <div style={{ height:6, borderRadius:3, background:C.border, overflow:"hidden" }}>
@@ -984,14 +992,11 @@ function ScreenerPage({ onSelectStock }) {
             </div>
           ) : (
             <div>
-              {/* 表頭 */}
-              <div style={{ display:"grid", gridTemplateColumns:"72px 1fr 90px 88px 56px 64px 76px", gap:6, padding:"8px 14px", background:C.surface2, fontSize:11, color:C.muted, fontWeight:600 }}>
+              <div style={{ display:"grid", gridTemplateColumns:"64px 1fr 90px 110px 80px", gap:12, padding:"10px 16px", background:C.surface2, fontSize:12, color:C.muted, fontWeight:600 }}>
                 <span>代號</span>
-                <span>名稱</span>
-                <span>產業別</span>
+                <span>名稱／產業</span>
                 <span style={{ textAlign:"right" }}>現價</span>
-                <span style={{ textAlign:"right" }}>PE</span>
-                <span style={{ textAlign:"right" }}>殖利率</span>
+                <span style={{ textAlign:"right" }}>台幣換算</span>
                 <span style={{ textAlign:"right" }}>估值區間</span>
               </div>
               {results.slice(0, 150).map(s=>{
@@ -1000,20 +1005,27 @@ function ScreenerPage({ onSelectStock }) {
                 return (
                   <div key={sym}
                     onClick={()=>onSelectStock&&onSelectStock(sym, s.market||market)}
-                    style={{ display:"grid", gridTemplateColumns:"72px 1fr 90px 88px 56px 64px 76px", gap:6, padding:"10px 14px", borderBottom:`1px solid ${C.surface2}`, alignItems:"center", cursor:"pointer" }}
+                    style={{ display:"grid", gridTemplateColumns:"64px 1fr 90px 110px 80px", gap:12, padding:"12px 16px", borderBottom:`1px solid ${C.surface2}`, alignItems:"center", cursor:"pointer" }}
                     onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
                     onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                     <span style={{ fontSize:13, fontWeight:700, color:C.accent }}>{sym}</span>
-                    <span style={{ fontSize:12, color:C.navy, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.name}</span>
-                    <span style={{ fontSize:10, color:C.faint, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.industry||"—"}</span>
-                    <span style={{ fontSize:13, fontWeight:600, color:C.navy, textAlign:"right", fontFamily:"monospace" }}>
-                      {s.price ? `${displayCS}${fmt(s.price)}` : "—"}
+                    <div style={{ overflow:"hidden" }}>
+                      <div style={{ fontSize:12, color:C.navy, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.name}</div>
+                      {s.industry && s.industry !== "—" && <div style={{ fontSize:11, color:C.muted, marginTop:1 }}>{s.industry}</div>}
+                    </div>
+                    <div style={{ textAlign:"right" }}>
+                      <div style={{ fontSize:13, fontWeight:600, color:C.navy, fontFamily:"monospace" }}>
+                        {s.price ? `${displayCS}${fmt(s.price)}` : "—"}
+                      </div>
                       {s.changePct != null && (
                         <div style={{ fontSize:10, color:s.changePct>=0?C.up:C.down }}>{fmtPct(s.changePct)}</div>
                       )}
-                    </span>
-                    <span style={{ fontSize:12, color:C.muted, textAlign:"right" }}>{s.pe ? fmt(s.pe,1) : "—"}</span>
-                    <span style={{ fontSize:12, color:C.muted, textAlign:"right" }}>{(s.divYield||s.dividendYield) ? `${fmt(s.divYield||s.dividendYield,1)}%` : "—"}</span>
+                    </div>
+                    <div style={{ textAlign:"right", fontSize:13, color:C.navy, fontFamily:"monospace" }}>
+                      {s.market === 'US' && s.price && rates?.USD?.sell
+                        ? `NT$${fmt(s.price*rates.USD.sell)}`
+                        : "—"}
+                    </div>
                     <span style={{ fontSize:11, fontWeight:700, color:zoneColor[s.zone]||C.muted, textAlign:"right" }}>
                       {s.zone !== "—" ? s.zone : <span style={{ color:C.faint }}>無資料</span>}
                     </span>
@@ -1036,7 +1048,7 @@ function ScreenerPage({ onSelectStock }) {
 // ============================================================
 // 自選清單頁
 // ============================================================
-function WatchlistPage({ user, onSelectStock }) {
+function WatchlistPage({ user, rates={}, onSelectStock }) {
   const [list,    setList]    = useState([]);
   const [loading, setLoading] = useState(false);
   const [addSym,  setAddSym]  = useState("");
@@ -1091,7 +1103,6 @@ function WatchlistPage({ user, onSelectStock }) {
     if (list.find(i => i.symbol === sym)) { setAddSym(""); return; }
     const market = detectMarket(sym);
 
-    // 抓名稱
     let name = sym;
     try {
       if (market === "TW") {
@@ -1157,38 +1168,85 @@ function WatchlistPage({ user, onSelectStock }) {
       ) : list.length === 0 ? (
         <Card><div style={{ textAlign:"center", padding:32, color:C.muted }}>還沒有自選股票，輸入代號開始新增</div></Card>
       ) : (
-        <Card style={{ padding:0, overflow:"hidden" }}>
-          <div style={{ display:"grid", gridTemplateColumns:"80px 1fr 100px 100px 60px", gap:8, padding:"8px 16px", background:C.surface2, fontSize:11, color:C.muted, fontWeight:600 }}>
-            <span>代號</span><span>名稱</span><span style={{ textAlign:"right" }}>現價</span><span style={{ textAlign:"right" }}>漲跌</span><span></span>
-          </div>
-          {list.map(item => {
-            const p = prices[item.symbol];
-            const name = p?.name || item.name || item.symbol;
-            const market = item.market || detectMarket(item.symbol);
-            const cs = market === "US" ? "$" : market === "JP" ? "¥" : "NT$";
-            return (
-              <div key={item.symbol}
-                style={{ display:"grid", gridTemplateColumns:"80px 1fr 100px 100px 60px", gap:8, padding:"12px 16px", borderBottom:`1px solid ${C.surface2}`, alignItems:"center" }}
-                onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
-                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                <span onClick={()=>onSelectStock&&onSelectStock(item.symbol)}
-                  style={{ fontSize:13, fontWeight:700, color:C.accent, cursor:"pointer" }}>{item.symbol}</span>
-                <span onClick={()=>onSelectStock&&onSelectStock(item.symbol)}
-                  style={{ fontSize:13, color:C.navy, cursor:"pointer" }}>{name}</span>
-                <span style={{ fontSize:13, fontWeight:700, color:C.navy, textAlign:"right", fontFamily:"monospace" }}>
-                  {p ? `${cs}${fmt(p.price)}` : "—"}
-                </span>
-                <span style={{ fontSize:12, textAlign:"right", color:p?.changePct>=0?C.up:C.down, fontFamily:"monospace" }}>
-                  {p ? fmtPct(p.changePct) : "—"}
-                </span>
-                <span style={{ textAlign:"right" }}>
-                  <button onClick={()=>removeFromList(item.symbol)}
-                    style={{ fontSize:12, color:C.faint, background:"transparent", border:"none", cursor:"pointer" }}>刪除</button>
-                </span>
+        <>
+          {list.filter(item => (item.market || detectMarket(item.symbol)) === 'TW').length > 0 && (
+            <Card style={{ padding:0, overflow:"hidden", marginBottom:16 }}>
+              <div style={{ padding:"12px 18px", background:C.surface2, fontSize:12, color:C.muted, fontWeight:700, display:"flex", alignItems:"center", gap:6 }}>
+                🇹🇼 台股
               </div>
-            );
-          })}
-        </Card>
+              <div style={{ display:"grid", gridTemplateColumns:"80px 1fr 110px 80px 44px", gap:16, padding:"8px 18px", background:C.surface2, fontSize:11, color:C.faint, fontWeight:600, borderTop:`1px solid ${C.border}` }}>
+                <span>代號</span><span>名稱／產業</span><span style={{ textAlign:"right" }}>現價</span><span style={{ textAlign:"right" }}>漲跌</span><span></span>
+              </div>
+              {list.filter(item => (item.market || detectMarket(item.symbol)) === 'TW').map(item => {
+                const p = prices[item.symbol];
+                const name = p?.name || item.name || item.symbol;
+                return (
+                  <div key={item.symbol}
+                    style={{ display:"grid", gridTemplateColumns:"80px 1fr 110px 80px 44px", gap:16, padding:"14px 18px", borderBottom:`1px solid ${C.surface2}`, alignItems:"center" }}
+                    onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
+                    onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                    <span onClick={()=>onSelectStock&&onSelectStock(item.symbol)}
+                      style={{ fontSize:13, fontWeight:700, color:C.accent, cursor:"pointer" }}>{item.symbol}</span>
+                    <div onClick={()=>onSelectStock&&onSelectStock(item.symbol)} style={{ cursor:"pointer", overflow:"hidden" }}>
+                      <div style={{ fontSize:13, color:C.navy, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{name}</div>
+                      {(() => { const found = STOCK_LIST.find(s=>s.sym===item.symbol); return found?.industry ? <div style={{ fontSize:11, color:C.navyMid, marginTop:1 }}>{found.industry}</div> : null; })()}
+                    </div>
+                    <div style={{ textAlign:"right", fontSize:13, fontWeight:700, color:C.navy, fontFamily:"monospace" }}>
+                      {p ? `NT$${fmt(p.price)}` : "—"}
+                    </div>
+                    <span style={{ fontSize:12, textAlign:"right", color:p?.changePct>=0?C.up:C.down, fontFamily:"monospace" }}>
+                      {p ? fmtPct(p.changePct) : "—"}
+                    </span>
+                    <span style={{ textAlign:"right" }}>
+                      <button onClick={()=>removeFromList(item.symbol)}
+                        style={{ fontSize:12, color:C.faint, background:"transparent", border:"none", cursor:"pointer" }}>刪除</button>
+                    </span>
+                  </div>
+                );
+              })}
+            </Card>
+          )}
+
+          {list.filter(item => (item.market || detectMarket(item.symbol)) === 'US').length > 0 && (
+            <Card style={{ padding:0, overflow:"hidden" }}>
+              <div style={{ padding:"12px 18px", background:C.surface2, fontSize:12, color:C.muted, fontWeight:700, display:"flex", alignItems:"center", gap:6 }}>
+                🇺🇸 美股
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"80px 1fr 110px 120px 80px 44px", gap:16, padding:"8px 18px", background:C.surface2, fontSize:11, color:C.faint, fontWeight:600, borderTop:`1px solid ${C.border}` }}>
+                <span>代號</span><span>名稱／產業</span><span style={{ textAlign:"right" }}>現價</span><span style={{ textAlign:"right" }}>台幣</span><span style={{ textAlign:"right" }}>漲跌</span><span></span>
+              </div>
+              {list.filter(item => (item.market || detectMarket(item.symbol)) === 'US').map(item => {
+                const p = prices[item.symbol];
+                const name = p?.name || item.name || item.symbol;
+                return (
+                  <div key={item.symbol}
+                    style={{ display:"grid", gridTemplateColumns:"80px 1fr 110px 120px 80px 44px", gap:16, padding:"14px 18px", borderBottom:`1px solid ${C.surface2}`, alignItems:"center" }}
+                    onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
+                    onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                    <span onClick={()=>onSelectStock&&onSelectStock(item.symbol)}
+                      style={{ fontSize:13, fontWeight:700, color:C.accent, cursor:"pointer" }}>{item.symbol}</span>
+                    <div onClick={()=>onSelectStock&&onSelectStock(item.symbol)} style={{ cursor:"pointer", overflow:"hidden" }}>
+                      <div style={{ fontSize:13, color:C.navy, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{name}</div>
+                    </div>
+                    <div style={{ textAlign:"right", fontSize:13, fontWeight:700, color:C.navy, fontFamily:"monospace" }}>
+                      {p ? `$${fmt(p.price)}` : "—"}
+                    </div>
+                    <div style={{ textAlign:"right", fontSize:13, color:C.navy, fontFamily:"monospace" }}>
+                      {p?.price && rates?.USD?.sell ? `NT$${fmt(p.price*rates.USD.sell)}` : "—"}
+                    </div>
+                    <span style={{ fontSize:12, textAlign:"right", color:p?.changePct>=0?C.up:C.down, fontFamily:"monospace" }}>
+                      {p ? fmtPct(p.changePct) : "—"}
+                    </span>
+                    <span style={{ textAlign:"right" }}>
+                      <button onClick={()=>removeFromList(item.symbol)}
+                        style={{ fontSize:12, color:C.faint, background:"transparent", border:"none", cursor:"pointer" }}>刪除</button>
+                    </span>
+                  </div>
+                );
+              })}
+            </Card>
+          )}
+        </>
       )}
 
       <div style={{ fontSize:12, color:C.muted, textAlign:"center", padding:"16px 0" }}>
@@ -1201,16 +1259,23 @@ function WatchlistPage({ user, onSelectStock }) {
 // ============================================================
 // 持倉管理頁（接 Supabase）
 // ============================================================
-function PortfolioPage({ user }) {
+function PortfolioPage({ user, rates={} }) {
   const [holdings, setHoldings] = useState([]);
   const [loading, setLoading]   = useState(false);
   const [addForm, setAddForm]   = useState({ symbol:"", shares:"", cost:"", date:"" });
   const [lotForm, setLotForm]   = useState({ shares:"", cost:"", date:"" });
   const [showAdd, setShowAdd]   = useState(false);
   const [showLotId, setShowLotId] = useState(null);
+  const [editLotKey, setEditLotKey] = useState(null);
+  const [expandedLots, setExpandedLots] = useState({});
+  const [editForm, setEditForm]   = useState({ shares:"", cost:"", date:"" });
   const [prices, setPrices]     = useState({});
 
-  // 載入持倉
+  const [dividends, setDividends] = useState({});
+  const [showDivSym, setShowDivSym] = useState(null);
+  const [divForm, setDivForm]   = useState({ exDate:"", cashDiv:"", shares:"", note:"" });
+  const [showDivInput, setShowDivInput] = useState(null);
+
   useEffect(() => {
     if (!user) {
       const saved = localStorage.getItem("gugugu_holdings");
@@ -1220,7 +1285,106 @@ function PortfolioPage({ user }) {
     loadHoldings();
   }, [user]);
 
-  // 載入完持倉後：抓即時價格 + 自動修正名稱
+  useEffect(() => {
+    if (holdings.length > 0) {
+      const syms = [...new Set(holdings.map(h=>h.symbol))];
+      loadDividends(syms);
+    }
+  }, [holdings.length]);
+
+  async function loadDividends(syms) {
+    if (!user || !syms?.length) return;
+    const { data } = await supabase
+      .from('dividends')
+      .select('*')
+      .eq('user_id', user.id)
+      .in('symbol', syms)
+      .order('ex_date', { ascending: false });
+    if (!data) return;
+    const grouped = {};
+    data.forEach(d => {
+      if (!grouped[d.symbol]) grouped[d.symbol] = [];
+      grouped[d.symbol].push(d);
+    });
+    setDividends(grouped);
+  }
+
+  async function addDividend(symbol, market) {
+    if (!divForm.exDate || !divForm.cashDiv) return;
+    const shares = parseFloat(divForm.shares) || 0;
+    const cashDiv = parseFloat(divForm.cashDiv) || 0;
+    const record = {
+      user_id: user?.id,
+      symbol, market,
+      ex_date:  divForm.exDate,
+      amount:   cashDiv,
+      shares:   shares,
+      total:    shares * cashDiv,
+      note:     divForm.note || null,
+    };
+    if (user) {
+      await supabase.from('dividends').insert(record);
+      loadDividends([symbol]);
+    }
+    setDivForm({ exDate:"", cashDiv:"", shares:"", note:"" });
+    setShowDivInput(null);
+  }
+
+  async function deleteDividend(id, symbol) {
+    if (!user) return;
+    await supabase.from('dividends').delete().eq('id', id);
+    loadDividends([symbol]);
+  }
+
+  function sharesOnDate(lots, exDate) {
+    return lots
+      .filter(l => l.date && l.date <= exDate)
+      .reduce((a, l) => a + (l.shares || 0), 0);
+  }
+
+  async function fetchFinMindDividends(symbol) {
+    try {
+      const holding = holdings.find(h => h.symbol === symbol);
+      if (!holding?.lots?.length) return;
+
+      const r = await fetch(`/api/finmind?type=dividend&symbol=${symbol}`);
+      const d = await r.json();
+      if (!d.success || !d.data?.length) return;
+
+      const firstBuyDate = holding.lots
+        .map(l => l.date)
+        .filter(Boolean)
+        .sort()[0];
+
+      const validDivs = d.data.filter(div =>
+        div.exDate && div.cashDiv > 0 && div.exDate >= firstBuyDate
+      );
+
+      if (!validDivs.length) return;
+
+      const records = validDivs.map(div => {
+        const sharesHeld = sharesOnDate(holding.lots, div.exDate);
+        const total = sharesHeld > 0 ? sharesHeld * div.cashDiv : null;
+        return {
+          user_id: user.id,
+          symbol,
+          market:   'TW',
+          ex_date:  div.exDate,
+          pay_date: div.payDate || null,
+          amount:   div.cashDiv,
+          shares:   sharesHeld || null,
+          total,
+          note:     `自動匯入`,
+        };
+      }).filter(r => r.ex_date);
+
+      if (records.length) {
+        await supabase.from('dividends').upsert(records, { onConflict: 'user_id,symbol,ex_date', ignoreDuplicates: false });
+        loadDividends([symbol]);
+      }
+    } catch(e) { console.error('fetchFinMindDividends error:', e); }
+  }
+
   useEffect(() => {
     if (holdings.length === 0) return;
     async function fetchPricesAndFixNames() {
@@ -1249,7 +1413,6 @@ function PortfolioPage({ user }) {
 
           newPrices[h.symbol] = price;
 
-          // 如果名稱等於代號（舊資料），自動更新到 Supabase
           if (stockName && stockName !== h.symbol && h.name === h.symbol && user) {
             await supabase
               .from("holdings")
@@ -1260,7 +1423,6 @@ function PortfolioPage({ user }) {
         } catch (_) {}
       }));
       setPrices(newPrices);
-      // 如果有名稱被修正，重新載入
       if (user) loadHoldings();
     }
     fetchPricesAndFixNames();
@@ -1273,7 +1435,6 @@ function PortfolioPage({ user }) {
       .select("*")
       .order("created_at", { ascending: true });
     if (data) {
-      // 轉換格式：每個 symbol 的多批次合併
       const grouped = {};
       data.forEach(row => {
         if (!grouped[row.symbol]) {
@@ -1296,7 +1457,6 @@ function PortfolioPage({ user }) {
     const market = detectMarket(sym);
     const lot = { shares: +addForm.shares, cost: +addForm.cost, date: addForm.date || new Date().toISOString().slice(0,10) };
 
-    // 先抓股票名稱
     let stockName = sym;
     try {
       if (market === "TW") {
@@ -1359,7 +1519,40 @@ function PortfolioPage({ user }) {
     }
   }
 
-  // 計算損益（用即時價格）
+  async function updateLot(symbol, market, lotId, lotIndex, form) {
+    const shares = +form.shares;
+    const cost   = +form.cost;
+    const date   = form.date;
+    if (!shares || !cost) return;
+    if (user && lotId) {
+      await supabase.from("holdings").update({ shares, cost, date }).eq("id", lotId);
+      loadHoldings();
+    } else {
+      const newHoldings = holdings.map(h => {
+        if (h.symbol !== symbol) return h;
+        const newLots = h.lots.map((l,i) => i === lotIndex ? { ...l, shares, cost, date } : l);
+        return { ...h, lots: newLots };
+      });
+      setHoldings(newHoldings);
+      saveLocal(newHoldings);
+    }
+    setEditLotKey(null);
+  }
+
+  async function deleteLot(symbol, lotId, lotIndex) {
+    if (user && lotId) {
+      await supabase.from("holdings").delete().eq("id", lotId);
+      loadHoldings();
+    } else {
+      const newHoldings = holdings.map(h => {
+        if (h.symbol !== symbol) return h;
+        return { ...h, lots: h.lots.filter((_,i) => i !== lotIndex) };
+      });
+      setHoldings(newHoldings.filter(h => h.lots.length > 0));
+      saveLocal(newHoldings.filter(h => h.lots.length > 0));
+    }
+  }
+
   const calced = holdings.map(h => {
     const currentPrice = prices[h.symbol] || 0;
     const totalShares = h.lots.reduce((a,l)=>a+l.shares, 0);
@@ -1369,13 +1562,19 @@ function PortfolioPage({ user }) {
     const pnl         = currentVal - totalCost;
     const pnlPct      = totalCost > 0 ? (pnl / totalCost) * 100 : 0;
     const cs = CS[h.market] || "NT$";
-    return { ...h, currentPrice, totalShares, totalCost, avgCost, currentVal, pnl, pnlPct, cs };
+    const divTotal = (dividends[h.symbol] || []).reduce((a,d) => a + (d.total || 0), 0);
+    const totalReturn    = pnl + divTotal;
+    const totalReturnPct = totalCost > 0 ? (totalReturn / totalCost) * 100 : 0;
+    return { ...h, currentPrice, totalShares, totalCost, avgCost, currentVal, pnl, pnlPct, divTotal, totalReturn, totalReturnPct, cs };
   });
 
-  const totVal  = calced.reduce((a,h)=>a+h.currentVal, 0);
-  const totCost = calced.reduce((a,h)=>a+h.totalCost,  0);
-  const totPnl  = totVal - totCost;
-  const totPct  = totCost > 0 ? (totPnl/totCost)*100 : 0;
+  const totVal       = calced.reduce((a,h)=>a+h.currentVal,    0);
+  const totCost      = calced.reduce((a,h)=>a+h.totalCost,    0);
+  const totPnl       = totVal - totCost;
+  const totPct       = totCost > 0 ? (totPnl/totCost)*100     : 0;
+  const totDiv       = calced.reduce((a,h)=>a+(h.divTotal||0), 0);
+  const totReturn    = totPnl + totDiv;
+  const totReturnPct = totCost > 0 ? (totReturn/totCost)*100  : 0;
 
   const inputStyle = { width:"100%", padding:"10px 12px", borderRadius:10, border:`1.5px solid ${C.border}`, background:C.surface, color:C.navy, fontSize:14, outline:"none", boxSizing:"border-box" };
 
@@ -1389,15 +1588,16 @@ function PortfolioPage({ user }) {
         </div>
       )}
 
-      {/* 總覽 */}
       <Card style={{ background:`linear-gradient(135deg,#EAF2FF,#F0F6FF)`, marginBottom:16 }}>
         <SectionLabel>OVERVIEW · 總持倉概覽</SectionLabel>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:12 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:12 }}>
           {[
             ["總市值",     fmtShort(totVal),   C.navy],
             ["總成本",     fmtShort(totCost),  C.navy],
-            ["未實現損益", fmtShort(totPnl),   totPnl>=0?C.up:C.down],
-            ["總報酬率",   fmtPct(totPct),     totPct>=0?C.up:C.down],
+            ["未實現損益", fmtShort(totPnl),      totPnl>=0?C.up:C.down],
+            ["總報酬率",   fmtPct(totPct),        totPct>=0?C.up:C.down],
+            ["含息損益",   fmtShort(totReturn),   totReturn>=0?C.up:C.down],
+            ["含息報酬率", fmtPct(totReturnPct),  totReturnPct>=0?C.up:C.down],
           ].map(([label,val,color])=>(
             <InnerBox key={label} style={{ background:"#fff" }}>
               <div style={{ fontSize:13, color:C.navy }}>{label}</div>
@@ -1405,6 +1605,16 @@ function PortfolioPage({ user }) {
             </InnerBox>
           ))}
         </div>
+        {calced.some(h=>h.market==='US') && (
+          <div style={{ fontSize:12, color:C.muted, marginBottom:12, padding:"8px 12px", background:C.surface2, borderRadius:8 }}>
+            💱 匯率換算（台銀即期賣出）：
+            {calced.filter(h=>h.market==='US').map(h=>(
+              <span key={h.symbol} style={{ marginLeft:8 }}>
+                {h.symbol} {h.cs}{fmt(h.currentVal)} ≈ NT${fmt(h.currentVal*(rates.USD?.sell||32.5))}
+              </span>
+            ))}
+          </div>
+        )}
         <button onClick={()=>setShowAdd(v=>!v)} style={{ width:"100%", padding:"10px", borderRadius:10, border:`1.5px dashed ${C.accent}`, background:"transparent", color:C.accent, fontWeight:700, fontSize:14, cursor:"pointer" }}>
           {showAdd?"✕ 取消":"+ 新增持股"}
         </button>
@@ -1419,7 +1629,6 @@ function PortfolioPage({ user }) {
         )}
       </Card>
 
-      {/* 持倉列表 */}
       {calced.length === 0 && (
         <Card><div style={{ textAlign:"center", padding:32, color:C.muted }}>還沒有持股，點上方「新增持股」開始記錄</div></Card>
       )}
@@ -1433,10 +1642,21 @@ function PortfolioPage({ user }) {
                   <span style={{ fontSize:14, color:C.muted }}>{h.name}</span>
                 )}
                 <Tag color={C.navyMid}>{ML[h.market]||"台股"}</Tag>
+                {(() => { const found = STOCK_LIST.find(s=>s.sym===h.symbol); return found?.industry ? <Tag color={C.faint}>{found.industry}</Tag> : null; })()}
               </div>
               <div style={{ fontSize:12, color:C.muted }}>{h.totalShares.toLocaleString()} 股 · 均價 {h.cs}{fmt(h.avgCost)} · {h.lots.length} 批</div>
             </div>
-            <button onClick={()=>deleteHolding(h.symbol)} style={{ fontSize:12, color:C.faint, background:"transparent", border:"none", cursor:"pointer" }}>刪除</button>
+            <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+              <button onClick={async()=>{
+                if (!user) return;
+                const { data } = await supabase.from('watchlist').select('symbol').eq('user_id',user.id).eq('symbol',h.symbol);
+                if (!data?.length) {
+                  await supabase.from('watchlist').insert({ user_id:user.id, symbol:h.symbol, market:h.market, name:h.name });
+                }
+                alert(`${h.symbol} 已加入自選`);
+              }} style={{ fontSize:12, color:C.accent, background:"transparent", border:`1px solid ${C.accent}44`, borderRadius:6, padding:"2px 8px", cursor:"pointer" }}>⭐ 自選</button>
+              <button onClick={()=>deleteHolding(h.symbol)} style={{ fontSize:12, color:C.faint, background:"transparent", border:"none", cursor:"pointer" }}>刪除</button>
+            </div>
           </div>
 
           <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:10 }}>
@@ -1451,18 +1671,147 @@ function PortfolioPage({ user }) {
               </InnerBox>
             ))}
           </div>
-
-          {h.lots.length > 1 && (
-            <InnerBox style={{ marginBottom:10 }}>
-              <div style={{ fontSize:13, color:C.navy, marginBottom:6 }}>分批明細</div>
-              {h.lots.map((l,i)=>(
-                <div key={i} style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:C.muted, padding:"3px 0", borderBottom:i<h.lots.length-1?`1px solid ${C.border}`:"none" }}>
-                  <span>第{i+1}批 · {l.date}</span>
-                  <span>{l.shares.toLocaleString()} 股 @ {h.cs}{fmt(l.cost)}</span>
-                </div>
-              ))}
-            </InnerBox>
+          {h.divTotal > 0 && (
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:10 }}>
+              <InnerBox>
+                <div style={{ fontSize:12, color:C.muted }}>累計配息</div>
+                <div style={{ fontSize:14, fontWeight:700, color:C.up, fontFamily:"monospace" }}>+{h.cs}{fmt(h.divTotal)}</div>
+              </InnerBox>
+              <InnerBox>
+                <div style={{ fontSize:12, color:C.muted }}>含息報酬率</div>
+                <div style={{ fontSize:14, fontWeight:700, color:h.totalReturnPct>=0?C.up:C.down, fontFamily:"monospace" }}>{fmtPct(h.totalReturnPct)}</div>
+              </InnerBox>
+            </div>
           )}
+
+          <InnerBox style={{ marginBottom:10 }}>
+            <div onClick={()=>setExpandedLots(v=>({...v,[h.symbol]:!v[h.symbol]}))}
+              style={{ display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer", userSelect:"none" }}>
+              <div style={{ fontSize:13, color:C.navy }}>
+                分批明細
+                <span style={{ fontSize:11, color:C.muted, marginLeft:6 }}>（{h.lots.length} 批）</span>
+              </div>
+              <span style={{ fontSize:12, color:C.muted }}>{expandedLots[h.symbol] ? "▲ 收合" : "▼ 展開"}</span>
+            </div>
+
+            {expandedLots[h.symbol] && (
+              <div style={{ marginTop:8 }}>
+                <div style={{ display:"grid", gridTemplateColumns:"36px 110px 1fr 110px 90px", gap:8, padding:"4px 0", borderBottom:`1px solid ${C.border}`, fontSize:11, color:C.faint, fontWeight:600 }}>
+                  <span>批次</span><span>日期</span><span style={{textAlign:"right"}}>股數</span><span style={{textAlign:"right"}}>成本</span><span></span>
+                </div>
+                {h.lots.map((l,i)=>{
+                  const key = `${h.symbol}-${i}`;
+                  const isEditing = editLotKey === key;
+                  return (
+                    <div key={i} style={{ borderBottom:i<h.lots.length-1?`1px solid ${C.border}`:"none" }}>
+                      {isEditing ? (
+                        <div style={{ padding:"8px 0", display:"flex", flexDirection:"column", gap:6 }}>
+                          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
+                            <input value={editForm.shares} onChange={e=>setEditForm(f=>({...f,shares:e.target.value}))}
+                              placeholder="股數" type="number" style={{ ...inputStyle, padding:"6px 10px", fontSize:12 }} />
+                            <input value={editForm.cost} onChange={e=>setEditForm(f=>({...f,cost:e.target.value}))}
+                              placeholder="成本" type="number" style={{ ...inputStyle, padding:"6px 10px", fontSize:12 }} />
+                            <input value={editForm.date} onChange={e=>setEditForm(f=>({...f,date:e.target.value}))}
+                              type="date" style={{ ...inputStyle, padding:"6px 10px", fontSize:12 }} />
+                          </div>
+                          <div style={{ display:"flex", gap:6 }}>
+                            <button onClick={()=>updateLot(h.symbol, h.market, l.id, i, editForm)}
+                              style={{ flex:1, padding:"6px", borderRadius:8, border:"none", background:C.accent, color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer" }}>儲存</button>
+                            <button onClick={()=>setEditLotKey(null)}
+                              style={{ flex:1, padding:"6px", borderRadius:8, border:`1px solid ${C.border}`, background:"transparent", color:C.muted, fontSize:12, cursor:"pointer" }}>取消</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ display:"grid", gridTemplateColumns:"36px 110px 1fr 110px 90px", gap:8, padding:"7px 0", alignItems:"center", fontSize:12, color:C.muted }}>
+                          <span style={{ fontWeight:600, color:C.navy }}>#{i+1}</span>
+                          <span>{l.date}</span>
+                          <span style={{ textAlign:"right" }}>{l.shares.toLocaleString()}</span>
+                          <span style={{ textAlign:"right", fontFamily:"monospace" }}>{h.cs}{fmt(l.cost)}</span>
+                          <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+                            <button onClick={()=>{ setEditLotKey(key); setEditForm({ shares:String(l.shares), cost:String(l.cost), date:l.date||"" }); }}
+                              style={{ fontSize:11, color:C.accent, background:"transparent", border:"none", cursor:"pointer" }}>編輯</button>
+                            <button onClick={()=>{ if(window.confirm(`確定刪除第${i+1}批？`)) deleteLot(h.symbol, l.id, i); }}
+                              style={{ fontSize:11, color:C.faint, background:"transparent", border:"none", cursor:"pointer" }}>刪除</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </InnerBox>
+
+          <div style={{ marginBottom:8 }}>
+            <div onClick={()=>setShowDivSym(v=>v===h.symbol?null:h.symbol)}
+              style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 12px", background:C.surface2, borderRadius:8, cursor:"pointer", marginBottom:4 }}>
+              <div style={{ fontSize:13, color:C.navy }}>
+                💰 配息記錄
+                {dividends[h.symbol]?.length > 0 && (
+                  <span style={{ fontSize:11, color:C.muted, marginLeft:6 }}>
+                    （共 {dividends[h.symbol].length} 筆 · 累計 NT${fmt(dividends[h.symbol].reduce((a,d)=>a+(d.total||0),0))}）
+                  </span>
+                )}
+              </div>
+              <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                {h.market==='TW' && user && (
+                  <button onClick={e=>{ e.stopPropagation(); fetchFinMindDividends(h.symbol); }}
+                    style={{ fontSize:11, color:C.accent, background:"transparent", border:`1px solid ${C.accent}44`, borderRadius:6, padding:"2px 8px", cursor:"pointer" }}>
+                    自動匯入
+                  </button>
+                )}
+                <span style={{ fontSize:12, color:C.muted }}>{showDivSym===h.symbol?"▲":"▼"}</span>
+              </div>
+            </div>
+
+            {showDivSym===h.symbol && (
+              <InnerBox>
+                {dividends[h.symbol]?.length > 0 ? (
+                  <div style={{ marginBottom:8 }}>
+                    <div style={{ display:"grid", gridTemplateColumns:"100px 70px 60px 1fr 50px", gap:6, fontSize:11, color:C.faint, fontWeight:600, padding:"4px 0", borderBottom:`1px solid ${C.border}` }}>
+                      <span>除息日</span><span style={{textAlign:"right"}}>現金股利</span><span style={{textAlign:"right"}}>股數</span><span style={{textAlign:"right"}}>合計</span><span></span>
+                    </div>
+                    {dividends[h.symbol].map(d=>(
+                      <div key={d.id} style={{ display:"grid", gridTemplateColumns:"100px 70px 60px 1fr 50px", gap:6, fontSize:12, color:C.muted, padding:"6px 0", borderBottom:`1px solid ${C.border}`, alignItems:"center" }}>
+                        <span>{d.ex_date}</span>
+                        <span style={{textAlign:"right"}}>{h.cs}{fmt(d.amount,2)}</span>
+                        <span style={{textAlign:"right"}}>{d.shares||"—"}</span>
+                        <span style={{textAlign:"right", fontFamily:"monospace"}}>{d.total ? `${h.cs}${fmt(d.total)}` : "—"}</span>
+                        <button onClick={()=>deleteDividend(d.id, h.symbol)}
+                          style={{ fontSize:11, color:C.faint, background:"transparent", border:"none", cursor:"pointer", textAlign:"right" }}>刪除</button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ fontSize:12, color:C.faint, padding:"8px 0" }}>尚無配息記錄</div>
+                )}
+
+                {showDivInput===h.symbol ? (
+                  <div style={{ marginTop:8, display:"flex", flexDirection:"column", gap:6 }}>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
+                      <input value={divForm.exDate} onChange={e=>setDivForm(f=>({...f,exDate:e.target.value}))}
+                        type="date" placeholder="除息日" style={{ ...inputStyle, padding:"6px 10px", fontSize:12 }} />
+                      <input value={divForm.cashDiv} onChange={e=>setDivForm(f=>({...f,cashDiv:e.target.value}))}
+                        type="number" placeholder="現金股利/股" style={{ ...inputStyle, padding:"6px 10px", fontSize:12 }} />
+                      <input value={divForm.shares} onChange={e=>setDivForm(f=>({...f,shares:e.target.value}))}
+                        type="number" placeholder="持有股數" style={{ ...inputStyle, padding:"6px 10px", fontSize:12 }} />
+                    </div>
+                    <div style={{ display:"flex", gap:6 }}>
+                      <button onClick={()=>addDividend(h.symbol, h.market)}
+                        style={{ flex:1, padding:"6px", borderRadius:8, border:"none", background:C.accent, color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer" }}>新增</button>
+                      <button onClick={()=>setShowDivInput(null)}
+                        style={{ flex:1, padding:"6px", borderRadius:8, border:`1px solid ${C.border}`, background:"transparent", color:C.muted, fontSize:12, cursor:"pointer" }}>取消</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button onClick={()=>setShowDivInput(h.symbol)}
+                    style={{ fontSize:12, color:C.accent, background:"transparent", border:`1px dashed ${C.accent}66`, borderRadius:8, padding:"6px 12px", cursor:"pointer", width:"100%", marginTop:4 }}>
+                    + 新增配息記錄
+                  </button>
+                )}
+              </InnerBox>
+            )}
+          </div>
 
           <button onClick={()=>setShowLotId(v=>v===h.symbol?null:h.symbol)}
             style={{ width:"100%", padding:"8px", borderRadius:10, border:`1px dashed ${C.accent}88`, background:"transparent", color:C.accent, fontSize:13, cursor:"pointer" }}>
@@ -1480,7 +1829,12 @@ function PortfolioPage({ user }) {
       ))}
 
       <div style={{ fontSize:12, color:C.muted, textAlign:"center", padding:"4px 0 16px" }}>
-        🕊️「股咕股」溫馨提示：本工具僅為個人開發之數據整合與指標分析統計，並非提供任何形式的投資買賣建議。市場有風險，投資需謹慎，「股咕股」只負責啼叫報時，盈虧請用戶自負。
+        <span className="desktop-notice">
+          🕊️「股咕股」溫馨提示：本工具僅為個人開發之數據整合與指標分析統計，<br/>並非提供任何形式的投資買賣建議。市場有風險，投資需謹慎，盈虧請用戶自負。
+        </span>
+        <span className="mobile-notice">
+          本工具僅供參考，不構成投資建議。<br/>市場有風險，盈虧請用戶自負。
+        </span>
       </div>
     </div>
   );
@@ -1562,10 +1916,14 @@ export default function App() {
   const [tab,         setTab]       = useState("stock");
   const [showLogin,   setShowLogin] = useState(false);
   const [user,        setUser]      = useState(null);
-  const [stockQuery,  setStockQuery] = useState(""); // 跨頁籤查詢
-  const [stockMarket, setStockMarket] = useState(null); // 跨頁籤查詢市場
+  const [stockQuery,  setStockQuery] = useState("");
+  const [stockMarket, setStockMarket] = useState(null);
+  const [rates, setRates] = useState({ USD:{ sell:32.5 }, JPY:{ sell:0.21 } });
 
-  // 監聽登入狀態
+  useEffect(() => {
+    fetch('/api/rate').then(r=>r.json()).then(d=>{ if(d.success) setRates(d.rates); }).catch(()=>{});
+  }, []);
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user || null);
@@ -1598,11 +1956,11 @@ export default function App() {
         <div style={{ maxWidth:960, margin:"0 auto" }}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
             <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-              <span style={{ fontSize:26 }}>🕊️</span>
+              <img src="/logo.png" alt="股咕股" style={{ width:48, height:48, borderRadius:14, objectFit:"cover" }} />
               <div>
                 <div style={{ fontSize:18, fontWeight:900, background:`linear-gradient(90deg,${C.accentDark},${C.accent})`, WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>全民股咕股</div>
                 <div style={{ fontSize:12, color:C.muted }}>台美日股 AI 巡檢助理</div>
-                <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>
+                <div style={{ fontSize:13, color:C.muted, marginTop:3 }}>
                   📬 每日巡檢通知：Telegram <span style={{ color:C.accent, fontWeight:600 }}>@gugugustock_bot</span>　·　LINE <span style={{ color:C.accent, fontWeight:600 }}>@807leplf</span>
                 </div>
               </div>
@@ -1628,7 +1986,7 @@ export default function App() {
 
       {/* Content */}
       <div style={{ maxWidth:960, margin:"0 auto", padding:"18px 14px 40px" }}>
-        {tab==="stock"     && <StockPage initialQuery={stockQuery} initialMarket={stockMarket} onQueryUsed={()=>{ setStockQuery(""); setStockMarket(null); }} onAddWatchlist={async(stock)=>{
+        {tab==="stock"     && <StockPage initialQuery={stockQuery} initialMarket={stockMarket} rates={rates} user={user} onQueryUsed={()=>{ setStockQuery(""); setStockMarket(null); }} onAddWatchlist={async(stock)=>{
           if (!stock) return;
           const sym = stock.symbol; const market = stock.market || "TW"; const name = stock.name || sym;
           if (user) {
@@ -1641,9 +1999,9 @@ export default function App() {
           }
           alert(`已將 ${name}（${sym}）加入自選組合`);
         }} />}
-        {tab==="screener"  && <ScreenerPage onSelectStock={(sym, mkt)=>{ setStockQuery(sym); setStockMarket(mkt||null); setTab("stock"); }} user={user} />}
-        {tab==="watchlist" && <WatchlistPage user={user} onSelectStock={sym=>{ setStockQuery(sym); setTab("stock"); }} />}
-        {tab==="portfolio" && <PortfolioPage user={user} />}
+        {tab==="screener"  && <ScreenerPage onSelectStock={(sym, mkt)=>{ setStockQuery(sym); setStockMarket(mkt||null); setTab("stock"); }} user={user} rates={rates} />}
+        {tab==="watchlist" && <WatchlistPage user={user} rates={rates} onSelectStock={sym=>{ setStockQuery(sym); setTab("stock"); }} />}
+        {tab==="portfolio" && <PortfolioPage user={user} rates={rates} />}
       </div>
     </div>
   );
