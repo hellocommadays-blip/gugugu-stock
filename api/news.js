@@ -88,20 +88,27 @@ ${newsListText}
 從上面的新聞裡，挑出 5 則對台股/美股市場最重要的新聞（去除重複或不重要的）。
 
 **第二步：分析**
-針對篩出的 5 則新聞，用繁體中文寫一份簡短分析報告，格式如下：
+針對篩出的 5 則新聞，用繁體中文寫一份簡短分析報告。
 
-📰 今日重點新聞（5則精選）
+嚴格依照以下純文字格式輸出，不要使用 Markdown 表格、不要使用 # 標題符號、不要使用任何 | 符號：
+
+今日重點新聞
+
 1. [新聞標題]
-   影響：[50字內，說明這則新聞可能造成的影響鏈，例如：原油上漲→航運成本增加→相關類股承壓]
+影響：[50字內，說明這則新聞可能造成的影響鏈，例如：原油上漲→航運成本增加→相關類股承壓]
 
-2. ...（依序列出5則）
+2. [新聞標題]
+影響：...
 
-🎯 對你自選股的影響
-自選股清單：${watchlistText}
+（依序列出5則，每則之間空一行）
 
-針對上面新聞，分析是否有任何一則與這些股票相關產業有關聯。如果完全無關，請直接說「今日新聞與您的自選股無直接關聯」。如果有關聯，請具體說明是哪一檔、哪則新聞、可能的影響方向。
+對自選股的影響
 
-語氣維持中性客觀，不給買賣建議，僅做資訊整理與邏輯推演。`;
+[逐一條列，每檔股票一段，格式：股票代號 股票名稱：影響說明文字，不要用表格]
+
+如果完全無關，請直接說「今日新聞與您的自選股無直接關聯」。
+
+語氣維持中性客觀，不給買賣建議，僅做資訊整理與邏輯推演。整份輸出禁止使用 #、|、---、Markdown表格語法。`;
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -130,6 +137,20 @@ export default async function handler(req, res) {
   if (!ANTHROPIC_KEY) {
     res.status(500).json({ error: 'ANTHROPIC_API_KEY 未設定' });
     return;
+  }
+
+  // 防護：非 latest 查詢時，需要 Cron Secret 或來自 Vercel Cron 才能觸發真正的分析
+  // 避免任何人直接打 /api/news 造成 token 濫用
+  if (!req.query.latest) {
+    const isVercelCron = req.headers['user-agent']?.includes('vercel-cron');
+    const cronSecret    = process.env.NEWS_CRON_SECRET;
+    const providedSecret = req.query.secret || req.headers['x-cron-secret'];
+    const isManualAuth  = cronSecret && providedSecret === cronSecret;
+
+    if (!isVercelCron && !isManualAuth) {
+      res.status(403).json({ error: '此端點僅供系統排程觸發，請使用 ?latest=1 查詢最新結果' });
+      return;
+    }
   }
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
