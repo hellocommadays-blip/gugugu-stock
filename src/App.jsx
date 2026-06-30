@@ -1041,6 +1041,15 @@ function ScreenerPage({ onSelectStock, user, rates={} }) {
           )}
         </Card>
       )}
+
+      <div style={{ fontSize:12, color:C.muted, textAlign:"center", padding:"16px 0" }}>
+        <span className="desktop-notice">
+          🕊️「股咕股」溫馨提示：本工具僅為個人開發之數據整合與指標分析統計，<br/>並非提供任何形式的投資買賣建議。市場有風險，投資需謹慎，盈虧請用戶自負。
+        </span>
+        <span className="mobile-notice">
+          本工具僅供參考，不構成投資建議。<br/>市場有風險，盈虧請用戶自負。
+        </span>
+      </div>
     </div>
   );
 }
@@ -1872,16 +1881,23 @@ function NewsPage() {
   }
 
   // 純文字渲染：自動偵測小標題（今日重點新聞／對自選股的影響）並加粗放大
+  // 把一行裡的 **粗體** 轉成真正的 <strong>，回傳 React node 陣列
+  function renderInline(line) {
+    const parts = line.split(/\*\*([^*]+)\*\*/g);
+    return parts.map((p, j) => j % 2 === 1 ? <strong key={j}>{p}</strong> : <span key={j}>{p}</span>);
+  }
+
   function renderAnalysis(text) {
     if (!text) return null;
-    // 清掉任何殘留的 markdown 符號，保險起見
-    const cleaned = text.replace(/^#+\s*/gm, '').replace(/\|/g, '').replace(/^---+$/gm, '');
+    // 清掉殘留的 markdown 結構符號（但保留 ** 讓 renderInline 處理）
+    const cleaned = text.replace(/^#+\s*/gm, '').replace(/\|/g, '').replace(/^-{3,}$/gm, '');
     const lines = cleaned.split('\n');
 
+    // 只有這兩個固定的區塊標題才當作大標題
     const isSectionTitle = (line) =>
-      line.includes('今日重點新聞') || line.includes('對自選股的影響') || line.includes('對你自選股的影響');
-    const isNumberedItem = (line) => /^\d+\.\s/.test(line.trim());
-    const isImpactLine   = (line) => line.trim().startsWith('影響：') || line.trim().startsWith('影響:');
+      /^(今日重點新聞|對自選股的影響|對你自選股的影響)/.test(line.replace(/\*\*/g, '').trim());
+    const isNumberedItem = (line) => /^\*{0,2}\d+\.\s/.test(line.trim());
+    const isImpactLine   = (line) => /^\*{0,2}影響[:：]/.test(line.trim());
 
     return lines.map((line, i) => {
       const trimmed = line.trim();
@@ -1889,29 +1905,29 @@ function NewsPage() {
 
       if (isSectionTitle(trimmed)) {
         return (
-          <div key={i} style={{ fontSize:18, fontWeight:800, color:C.navy, marginTop:i>0?20:0, marginBottom:10 }}>
-            {trimmed}
+          <div key={i} style={{ fontSize:19, fontWeight:800, color:C.navy, marginTop:i>0?22:0, marginBottom:12 }}>
+            {renderInline(trimmed.replace(/\*\*/g, ''))}
           </div>
         );
       }
       if (isNumberedItem(trimmed)) {
         return (
-          <div key={i} style={{ fontSize:16, fontWeight:700, color:C.navy, lineHeight:1.7, marginTop:8 }}>
-            {trimmed}
+          <div key={i} style={{ fontSize:16, fontWeight:700, color:C.navy, lineHeight:1.7, marginTop:10 }}>
+            {renderInline(trimmed)}
           </div>
         );
       }
       if (isImpactLine(trimmed)) {
         return (
           <div key={i} style={{ fontSize:15, color:C.muted, lineHeight:1.8, marginBottom:6, paddingLeft:4 }}>
-            {trimmed}
+            {renderInline(trimmed)}
           </div>
         );
       }
-      // 一般內文
+      // 一般內文（含小整合說明、自選股段落）
       return (
         <div key={i} style={{ fontSize:15, color:C.navy, lineHeight:1.8 }}>
-          {trimmed}
+          {renderInline(trimmed)}
         </div>
       );
     });
@@ -1950,11 +1966,17 @@ function NewsPage() {
             更新時間：{new Date(data.created_at).toLocaleString('zh-TW', { timeZone:'Asia/Taipei' })}
           </div>
           {renderAnalysis(data.analysis)}
-          <div style={{ fontSize:11, color:C.faint, marginTop:16, paddingTop:12, borderTop:`1px solid ${C.border}` }}>
-            ⚠️ 新聞分析僅供參考，不構成投資建議
-          </div>
         </Card>
       )}
+
+      <div style={{ fontSize:12, color:C.muted, textAlign:"center", padding:"16px 0" }}>
+        <span className="desktop-notice">
+          🕊️「股咕股」溫馨提示：本工具僅為個人開發之數據整合與指標分析統計，<br/>並非提供任何形式的投資買賣建議。市場有風險，投資需謹慎，盈虧請用戶自負。
+        </span>
+        <span className="mobile-notice">
+          本工具僅供參考，不構成投資建議。<br/>市場有風險，盈虧請用戶自負。
+        </span>
+      </div>
     </div>
   );
 }
