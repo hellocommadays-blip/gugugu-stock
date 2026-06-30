@@ -7,6 +7,8 @@
     { "path": "/api/notify",       "schedule": "0 22 * * 1-5" },
     { "path": "/api/sync-stocks?offset=0&limit=40",  "schedule": "0 23 * * 1-5" },
     { "path": "/api/sync-stocks?offset=40&limit=40", "schedule": "5 23 * * 1-5" },
-    { "path": "/api/sync-stocks?offset=80&limit=40", "schedule": "10 23 * * 1-5" }
+    { "path": "/api/sync-stocks?offset=80&limit=40", "schedule": "10 23 * * 1-5" },
+    { "path": "/api/news",         "schedule": "30 0 * * 1-5" },
+    { "path": "/api/news",         "schedule": "40 5 * * 1-5" }
   ]
 }
