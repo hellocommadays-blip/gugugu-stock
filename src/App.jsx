@@ -1871,27 +1871,47 @@ function NewsPage() {
     }
   }
 
-  // 把 markdown 簡單轉換成排版（標題、粗體、表格列）
+  // 純文字渲染：自動偵測小標題（今日重點新聞／對自選股的影響）並加粗放大
   function renderAnalysis(text) {
     if (!text) return null;
-    const lines = text.split('\n');
+    // 清掉任何殘留的 markdown 符號，保險起見
+    const cleaned = text.replace(/^#+\s*/gm, '').replace(/\|/g, '').replace(/^---+$/gm, '');
+    const lines = cleaned.split('\n');
+
+    const isSectionTitle = (line) =>
+      line.includes('今日重點新聞') || line.includes('對自選股的影響') || line.includes('對你自選股的影響');
+    const isNumberedItem = (line) => /^\d+\.\s/.test(line.trim());
+    const isImpactLine   = (line) => line.trim().startsWith('影響：') || line.trim().startsWith('影響:');
+
     return lines.map((line, i) => {
-      // 表格列跳過渲染原始符號，簡化處理
-      if (line.startsWith('|')) {
-        return <div key={i} style={{ fontSize:13, color:C.navy, padding:"4px 0", borderBottom:`1px solid ${C.border}` }}>{line.replace(/\|/g, '  ').trim()}</div>;
+      const trimmed = line.trim();
+      if (trimmed === '') return <div key={i} style={{ height:10 }} />;
+
+      if (isSectionTitle(trimmed)) {
+        return (
+          <div key={i} style={{ fontSize:18, fontWeight:800, color:C.navy, marginTop:i>0?20:0, marginBottom:10 }}>
+            {trimmed}
+          </div>
+        );
       }
-      if (line.startsWith('#')) {
-        const text2 = line.replace(/^#+\s*/, '');
-        return <div key={i} style={{ fontSize:16, fontWeight:800, color:C.navy, marginTop:i>0?16:0, marginBottom:8 }}>{text2}</div>;
+      if (isNumberedItem(trimmed)) {
+        return (
+          <div key={i} style={{ fontSize:16, fontWeight:700, color:C.navy, lineHeight:1.7, marginTop:8 }}>
+            {trimmed}
+          </div>
+        );
       }
-      if (line.trim() === '---') {
-        return <div key={i} style={{ borderTop:`1px solid ${C.border}`, margin:"10px 0" }} />;
+      if (isImpactLine(trimmed)) {
+        return (
+          <div key={i} style={{ fontSize:15, color:C.muted, lineHeight:1.8, marginBottom:6, paddingLeft:4 }}>
+            {trimmed}
+          </div>
+        );
       }
-      // **粗體**處理
-      const parts = line.split(/\*\*([^*]+)\*\*/g);
+      // 一般內文
       return (
-        <div key={i} style={{ fontSize:14, color:C.navy, lineHeight:1.8, marginBottom: line.trim()===''?6:0 }}>
-          {parts.map((p, j) => j % 2 === 1 ? <strong key={j}>{p}</strong> : <span key={j}>{p}</span>)}
+        <div key={i} style={{ fontSize:15, color:C.navy, lineHeight:1.8 }}>
+          {trimmed}
         </div>
       );
     });
