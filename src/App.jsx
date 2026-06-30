@@ -1564,6 +1564,9 @@ export default function App() {
   const [user,        setUser]      = useState(null);
   const [stockQuery,  setStockQuery] = useState(""); // 跨頁籤查詢
   const [stockMarket, setStockMarket] = useState(null); // 跨頁籤查詢市場
+  const [showTgBanner, setShowTgBanner] = useState(() => {
+    try { return localStorage.getItem('hideTgBanner') !== '1'; } catch(_) { return true; }
+  });
 
   // 監聽登入狀態
   useEffect(() => {
@@ -1598,7 +1601,7 @@ export default function App() {
         <div style={{ maxWidth:960, margin:"0 auto" }}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
             <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-              <img src="/logo.png" alt="股咕股" style={{ width:48, height:48, borderRadius:14, objectFit:"cover" }} />
+              <span style={{ fontSize:26 }}>🕊️</span>
               <div>
                 <div style={{ fontSize:18, fontWeight:900, background:`linear-gradient(90deg,${C.accentDark},${C.accent})`, WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>全民股咕股</div>
                 <div style={{ fontSize:12, color:C.muted }}>台美日股 AI 巡檢助理</div>
@@ -1622,6 +1625,23 @@ export default function App() {
           </div>
         </div>
       </div>
+
+      {/* Telegram 推播提示橫條 */}
+      {showTgBanner && (
+        <div style={{ background:"#E8F5F0", borderBottom:`1px solid ${C.border}` }}>
+          <div style={{ maxWidth:960, margin:"0 auto", padding:"10px 14px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap" }}>
+            <div style={{ fontSize:13, color:"#2C6E5C" }}>
+              📬 想每天收到自選股巡檢通知？到 Telegram 搜尋 <strong>@gugugustock_bot</strong> 免費訂閱
+            </div>
+            <button onClick={()=>{
+              setShowTgBanner(false);
+              try { localStorage.setItem('hideTgBanner', '1'); } catch(_) {}
+            }} style={{ fontSize:12, color:"#2C6E5C", background:"transparent", border:"none", cursor:"pointer", flexShrink:0 }}>
+              ✕ 不再顯示
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Content */}
       <div style={{ maxWidth:960, margin:"0 auto", padding:"18px 14px 40px" }}>
