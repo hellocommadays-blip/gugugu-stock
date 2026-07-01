@@ -672,17 +672,17 @@ function StockPage({ initialQuery='', initialMarket=null, rates={}, user=null, o
           </Card>
 
           <AIAnalysis stock={stock} bm={bm} zone={zone} user={user} />
-
-          <div style={{ fontSize:12, color:C.muted, textAlign:"center", padding:"4px 0 12px" }}>
-            <span className="desktop-notice">
-              🕊️「股咕股」溫馨提示：本工具僅為個人開發之數據整合與指標分析統計，<br/>並非提供任何形式的投資買賣建議。市場有風險，投資需謹慎，盈虧請用戶自負。
-            </span>
-            <span className="mobile-notice">
-              本工具僅供參考，不構成投資建議。<br/>市場有風險，盈虧請用戶自負。
-            </span>
-          </div>
         </div>
       )}
+
+      <div style={{ fontSize:12, color:C.muted, textAlign:"center", padding:"16px 0" }}>
+        <span className="desktop-notice">
+          🕊️「股咕股」溫馨提示：本工具僅為個人開發之數據整合與指標分析統計，<br/>並非提供任何形式的投資買賣建議。市場有風險，投資需謹慎，盈虧請用戶自負。
+        </span>
+        <span className="mobile-notice">
+          本工具僅供參考，不構成投資建議。<br/>市場有風險，盈虧請用戶自負。
+        </span>
+      </div>
     </div>
   );
 }
