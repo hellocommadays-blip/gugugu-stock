@@ -16,6 +16,11 @@
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       body { font-family: 'Inter', 'Noto Sans TC', -apple-system, sans-serif; }
+      .mobile-notice { display: none; }
+      @media (max-width: 600px) {
+        .desktop-notice { display: none; }
+        .mobile-notice { display: inline; }
+      }
     </style>
   </head>
   <body>
