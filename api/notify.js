@@ -30,9 +30,10 @@ function shouldNotify(zone) {
 // 抓台股即時報價 + 基準值
 async function fetchTWStock(sym) {
   try {
-    const base = process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : 'https://gugugu-stock.vercel.app';
+    // 不要用 process.env.VERCEL_URL——那指向的是「這次部署專屬網址」，
+    // Vercel 預設會擋一層 Deployment Protection 驗證頁，打過去會拿到 HTML 而不是 JSON，
+    // 導致下面 r.json() 直接丟出例外，被這層 catch 吞掉、回傳 null。
+    const base = 'https://gugugu-stock.vercel.app';
 
     const [priceRes, epsRes] = await Promise.all([
       fetch(`${base}/api/twse?type=price&stockNo=${sym}`).then(r=>r.json()),
@@ -49,15 +50,14 @@ async function fetchTWStock(sym) {
       : null;
 
     return { sym, name, price, bm, market: 'TW', currency: 'NT$' };
-  } catch { return null; }
+  } catch (err) { console.error(`fetchTWStock error [${sym}]:`, err.message); return null; }
 }
 
 // 抓美股即時報價 + 基準值
 async function fetchUSStock(sym) {
   try {
-    const base = process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : 'https://gugugu-stock.vercel.app';
+    // 同上，固定打正式網域，不要用 VERCEL_URL
+    const base = 'https://gugugu-stock.vercel.app';
 
     const [quoteRes, finRes] = await Promise.all([
       fetch(`${base}/api/finnhub?symbol=${sym}&market=US&type=quote`).then(r=>r.json()),
@@ -73,7 +73,7 @@ async function fetchUSStock(sym) {
       : null;
 
     return { sym, name: q.name, price: q.price, bm, market: 'US', currency: '$' };
-  } catch { return null; }
+  } catch (err) { console.error(`fetchUSStock error [${sym}]:`, err.message); return null; }
 }
 
 // 發送 Telegram 訊息
