@@ -23,6 +23,82 @@ function getLastTradingDates(count = 3) {
   return dates;
 }
 
+// TWSE 產業分類代碼 → 中文名稱（screener、industrype、eps 共用）
+const INDUSTRY_MAP = {
+  '01':'水泥工業','02':'食品工業','03':'塑膠工業','04':'紡織纖維',
+  '05':'電機機械','06':'電器電纜','07':'化學生技醫療','08':'玻璃陶瓷',
+  '09':'造紙工業','10':'鋼鐵工業','11':'橡膠工業','12':'汽車工業',
+  '13':'電子工業','14':'建材營造','15':'航運業','16':'觀光餐旅',
+  '17':'金融保險','18':'貿易百貨','19':'綜合','20':'其他',
+  '21':'化學工業','22':'生技醫療業','23':'油電燃氣業','24':'半導體業',
+  '25':'電腦及週邊設備業','26':'光電業','27':'通信網路業','28':'電子零組件業',
+  '29':'電子通路業','30':'資訊服務業','31':'其他電子業','32':'文化創意業',
+  '33':'農業科技業','34':'電子商務','35':'綠能環保','36':'數位雲端',
+  '37':'運動休閒','38':'居家生活','80':'管理股票','90':'存託憑證',
+};
+
+// 抓全市場 PE/PB（BWIBBU_d）+ 公司產業分類（t187ap03_L）
+// screener、industrype、eps 共用，避免重複實作抓取邏輯
+async function fetchMarketPEPB() {
+  const tradingDates = getLastTradingDates(3);
+  let raw = null;
+  for (const dateStr of tradingDates) {
+    const url = `https://www.twse.com.tw/rwd/zh/afterTrading/BWIBBU_d?date=${dateStr}&selectType=ALL&response=json`;
+    const r   = await fetch(url);
+    raw = await r.json();
+    if (raw?.data?.length) break;
+    raw = null;
+  }
+  if (!raw?.data) return { rows: [], industryMap: {}, date: null };
+
+  const companyRes   = await fetch('https://openapi.twse.com.tw/v1/opendata/t187ap03_L');
+  const companyRaw   = await companyRes.json().catch(() => []);
+  const industryMap  = {};
+  if (Array.isArray(companyRaw)) {
+    companyRaw.forEach(c => {
+      const code = c['公司代號'];
+      const ind  = c['產業別'];
+      if (code) industryMap[code] = INDUSTRY_MAP[ind] || ind || '';
+    });
+  }
+
+  return { rows: raw.data, industryMap, date: raw.date || null };
+}
+
+function median(nums) {
+  const sorted = [...nums].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+// 依產業分組，算出每個產業目前的 PE 中位數
+// 回傳 { industries: { 產業名稱: { medianPE, sampleSize } }, industryMap, date }
+async function computeIndustryMedianPE() {
+  const { rows, industryMap, date } = await fetchMarketPEPB();
+
+  const byIndustry = {};
+  rows.forEach(row => {
+    const symbol = row[0];
+    const pe     = parseFloat(row[5]);
+    // 排除虧損股（PE 為負或 0）與缺資料的股票，避免拉歪中位數
+    if (!symbol || !pe || pe <= 0) return;
+    const industry = industryMap[symbol] || '其他';
+    if (!byIndustry[industry]) byIndustry[industry] = [];
+    byIndustry[industry].push(pe);
+  });
+
+  const industries = {};
+  Object.entries(byIndustry).forEach(([industry, peList]) => {
+    industries[industry] = {
+      medianPE:   Math.round(median(peList) * 100) / 100,
+      sampleSize: peList.length,
+    };
+  });
+
+  return { industries, industryMap, date };
+}
+
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -30,8 +106,8 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') { res.status(200).end(); return; }
 
   const { type, stockNo } = req.query;
-  // screener 不需要 stockNo
-  if (!stockNo && type !== 'screener') { res.status(400).json({ error: 'stockNo 必填' }); return; }
+  // screener、industrype 不需要 stockNo
+  if (!stockNo && type !== 'screener' && type !== 'industrype') { res.status(400).json({ error: 'stockNo 必填' }); return; }
 
   try {
     let data;
@@ -391,6 +467,42 @@ export default async function handler(req, res) {
             error: err.message,
           };
         }
+
+        // ── 新增：EPS × 產業中位數PE 估值法（跟原本的 BPS×ROE×10 並存，先不取代）──
+        // 用「同產業其他股票現在實際交易的PE中位數」當基準，取代原本拍腦袋訂的固定倍數 10。
+        // 打站內的 industrype endpoint（走 CDN 快取，一天只會真正重新計算一次），
+        // 不要直接呼叫 computeIndustryMedianPE()——那樣等於每次查個股都重新掃一次全市場，
+        // 這個 eps endpoint 本身已經疊了好幾個外部 API 呼叫，不該再疊一次全市場掃描。
+        // 這段獨立包一層 try/catch：就算產業中位數查詢失敗，也不能影響上面已經算好的 benchmark。
+        try {
+          const base = process.env.VERCEL_URL
+            ? `https://${process.env.VERCEL_URL}`
+            : 'https://gugugu-stock.vercel.app';
+          const indRes  = await fetch(`${base}/api/twse?type=industrype`);
+          const indData = await indRes.json();
+
+          const industries   = indData?.industries || {};
+          // industrype 不回傳 industryMap（避免回應太肥），這裡另外查這支股票自己的產業別
+          const compRes  = await fetch('https://openapi.twse.com.tw/v1/opendata/t187ap03_L');
+          const compRaw  = await compRes.json().catch(() => []);
+          const compItem = Array.isArray(compRaw) ? compRaw.find(c => c['公司代號'] === stockNo) : null;
+          const stockIndustry = compItem ? (INDUSTRY_MAP[compItem['產業別']] || compItem['產業別'] || null) : null;
+          const industryStat  = stockIndustry ? industries[stockIndustry] : null;
+
+          data.industryName       = stockIndustry;
+          data.industryMedianPE   = industryStat ? industryStat.medianPE   : null;
+          data.industrySampleSize = industryStat ? industryStat.sampleSize : null;
+          data.benchmarkByPE = (data.eps4sum > 0 && industryStat?.medianPE)
+            ? Math.round(data.eps4sum * industryStat.medianPE * 100) / 100
+            : null;
+        } catch (industryErr) {
+          console.error('industry median PE lookup error:', industryErr.message);
+          data.industryName       = null;
+          data.industryMedianPE   = null;
+          data.industrySampleSize = null;
+          data.benchmarkByPE      = null;
+        }
+
         break;
       }
 
@@ -449,20 +561,6 @@ export default async function handler(req, res) {
 
       // ── 公司基本資料 ──────────────────────────────────────
       case 'company': {
-        // 產業代碼對照表（TWSE 官方分類）
-        const INDUSTRY_MAP = {
-          '01':'水泥工業','02':'食品工業','03':'塑膠工業','04':'紡織纖維',
-          '05':'電機機械','06':'電器電纜','07':'化學生技醫療','08':'玻璃陶瓷',
-          '09':'造紙工業','10':'鋼鐵工業','11':'橡膠工業','12':'汽車工業',
-          '13':'電子工業','14':'建材營造','15':'航運業','16':'觀光餐旅',
-          '17':'金融保險','18':'貿易百貨','19':'綜合','20':'其他',
-          '21':'化學工業','22':'生技醫療業','23':'油電燃氣業','24':'半導體業',
-          '25':'電腦及週邊設備業','26':'光電業','27':'通信網路業','28':'電子零組件業',
-          '29':'電子通路業','30':'資訊服務業','31':'其他電子業','32':'文化創意業',
-          '33':'農業科技業','34':'電子商務','35':'綠能環保','36':'數位雲端',
-          '37':'運動休閒','38':'居家生活','80':'管理股票','90':'存託憑證',
-        };
-
         const url = `https://openapi.twse.com.tw/v1/opendata/t187ap03_L`;
         const r   = await fetch(url);
         const raw = await r.json();
@@ -483,49 +581,15 @@ export default async function handler(req, res) {
 
       // ── 全市場選股（BWIBBU_d 近似基準值）────────────────
       case 'screener': {
-        const INDUSTRY_MAP = {
-          '01':'水泥工業','02':'食品工業','03':'塑膠工業','04':'紡織纖維',
-          '05':'電機機械','06':'電器電纜','07':'化學生技醫療','08':'玻璃陶瓷',
-          '09':'造紙工業','10':'鋼鐵工業','11':'橡膠工業','12':'汽車工業',
-          '13':'電子工業','14':'建材營造','15':'航運業','16':'觀光餐旅',
-          '17':'金融保險','18':'貿易百貨','19':'綜合','20':'其他',
-          '21':'化學工業','22':'生技醫療業','23':'油電燃氣業','24':'半導體業',
-          '25':'電腦及週邊設備業','26':'光電業','27':'通信網路業','28':'電子零組件業',
-          '29':'電子通路業','30':'資訊服務業','31':'其他電子業','32':'文化創意業',
-          '33':'農業科技業','34':'電子商務','35':'綠能環保','36':'數位雲端',
-          '37':'運動休閒','38':'居家生活','80':'管理股票','90':'存託憑證',
-        };
+        const { rows, industryMap, date } = await fetchMarketPEPB();
 
-        // 同時抓：BWIBBU_d + 公司基本資料（含產業別）
-        const tradingDates = getLastTradingDates(3);
-        let raw = null;
-        for (const dateStr of tradingDates) {
-          const url = `https://www.twse.com.tw/rwd/zh/afterTrading/BWIBBU_d?date=${dateStr}&selectType=ALL&response=json`;
-          const r   = await fetch(url);
-          raw = await r.json();
-          if (raw?.data?.length) break;
-          raw = null;
-        }
-
-        if (!raw?.data) {
+        if (!rows.length) {
           res.status(200).json({ success: true, data: [], note: '無市場資料' });
           return;
         }
 
-        // 抓公司基本資料（含產業代碼）
-        const companyRes = await fetch('https://openapi.twse.com.tw/v1/opendata/t187ap03_L');
-        const companyRaw = await companyRes.json().catch(()=>[]);
-        const industryMap = {};
-        if (Array.isArray(companyRaw)) {
-          companyRaw.forEach(c => {
-            const code = c['公司代號'];
-            const ind  = c['產業別'];
-            if (code) industryMap[code] = INDUSTRY_MAP[ind] || ind || '';
-          });
-        }
-
         // 計算每支股票的近似基準值
-        const results = raw.data
+        const results = rows
           .filter(row => row[0] && row[5] && row[6])
           .map(row => {
             const symbol   = row[0];
@@ -563,8 +627,18 @@ export default async function handler(req, res) {
           })
           .filter(Boolean);
 
-        res.status(200).json({ success: true, data: results, date: raw.date });
-        break;
+        res.status(200).json({ success: true, data: results, date });
+        return;
+      }
+
+      // ── 產業本益比中位數（給「EPS × 產業中位數PE」估值法用）──
+      case 'industrype': {
+        const { industries, date } = await computeIndustryMedianPE();
+        // 一天更新一次即可（TWSE 資料本來就是收盤後才更新），交給 CDN 快取，
+        // 避免每次查詢個股都要重新掃一次全市場
+        res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate');
+        res.status(200).json({ success: true, industries, date });
+        return;
       }
 
       default:
