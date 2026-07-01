@@ -1857,14 +1857,34 @@ function PortfolioPage({ user, rates={} }) {
 // ============================================================
 // 產業動態頁
 // ============================================================
-function NewsPage() {
-  const [data, setData]       = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState("");
+function NewsPage({ user }) {
+  const [data, setData]             = useState(null);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState("");
+  const [myWatchlist, setMyWatchlist] = useState([]); // 目前登入用戶自己的自選股代號（大寫）
 
   useEffect(() => {
     loadLatest();
   }, []);
+
+  useEffect(() => {
+    loadMyWatchlist();
+  }, [user]);
+
+  async function loadMyWatchlist() {
+    try {
+      if (user) {
+        const { data: rows } = await supabase.from("watchlist").select("symbol").eq("user_id", user.id);
+        setMyWatchlist((rows || []).map(r => (r.symbol || "").toUpperCase()));
+      } else {
+        const saved = localStorage.getItem("gugugu_watchlist");
+        const list = saved ? JSON.parse(saved) : [];
+        setMyWatchlist(list.map(i => (i.symbol || "").toUpperCase()));
+      }
+    } catch (_) {
+      setMyWatchlist([]);
+    }
+  }
 
   async function loadLatest() {
     setLoading(true); setError("");
@@ -1878,6 +1898,11 @@ function NewsPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function refresh() {
+    await loadLatest();
+    await loadMyWatchlist();
   }
 
   // 純文字渲染：自動偵測小標題（今日重點新聞／對自選股的影響）並加粗放大
@@ -1938,7 +1963,7 @@ function NewsPage() {
       <Card style={{ marginBottom:16 }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
           <SectionLabel>NEWS · 產業動態分析</SectionLabel>
-          <button onClick={loadLatest} disabled={loading}
+          <button onClick={refresh} disabled={loading}
             style={{ fontSize:12, color:C.accent, background:"transparent", border:`1px solid ${C.accent}44`, borderRadius:8, padding:"4px 10px", cursor:"pointer" }}>
             {loading ? "載入中⋯" : "🔄 重新整理"}
           </button>
@@ -1968,6 +1993,47 @@ function NewsPage() {
           {renderAnalysis(data.analysis)}
         </Card>
       )}
+
+      {!loading && data && (() => {
+        const impacts = Array.isArray(data.stock_impacts) ? data.stock_impacts : null;
+        const myImpacts = impacts
+          ? impacts.filter(item => myWatchlist.includes((item.symbol || "").toUpperCase()))
+          : [];
+
+        return (
+          <Card style={{ marginTop:16 }}>
+            <div style={{ fontSize:19, fontWeight:800, color:C.navy, marginBottom:12 }}>
+              對自選股的影響
+            </div>
+
+            {impacts === null ? (
+              // 相容舊資料（尚未有 stock_impacts 欄位的舊分析）
+              <div style={{ fontSize:14, color:C.muted }}>
+                此則分析尚未包含個人化自選股資料，下次系統自動更新後會補上。
+              </div>
+            ) : myWatchlist.length === 0 ? (
+              <div style={{ fontSize:14, color:C.muted }}>
+                {user ? "你尚未加入任何自選股，加入後這裡會顯示新聞對你自選股的影響。" : "登入並加入自選股後，這裡會顯示新聞對你自選股的影響。"}
+              </div>
+            ) : myImpacts.length === 0 ? (
+              <div style={{ fontSize:14, color:C.muted }}>
+                你的自選股清單暫時不在本次分析範圍內，可稍後點「重新整理」再看看。
+              </div>
+            ) : (
+              myImpacts.map((item, i) => (
+                <div key={i} style={{ marginBottom: i === myImpacts.length - 1 ? 0 : 14 }}>
+                  <div style={{ fontSize:16, fontWeight:700, color:C.navy }}>
+                    {item.symbol} {item.name}
+                  </div>
+                  <div style={{ fontSize:15, color:C.muted, lineHeight:1.8, paddingLeft:4 }}>
+                    {item.impact}
+                  </div>
+                </div>
+              ))
+            )}
+          </Card>
+        );
+      })()}
 
       <div style={{ fontSize:12, color:C.muted, textAlign:"center", padding:"16px 0" }}>
         <span className="desktop-notice">
@@ -2144,7 +2210,7 @@ export default function App() {
         {tab==="screener"  && <ScreenerPage onSelectStock={(sym, mkt)=>{ setStockQuery(sym); setStockMarket(mkt||null); setTab("stock"); }} user={user} rates={rates} />}
         {tab==="watchlist" && <WatchlistPage user={user} rates={rates} onSelectStock={sym=>{ setStockQuery(sym); setTab("stock"); }} />}
         {tab==="portfolio" && <PortfolioPage user={user} rates={rates} />}
-        {tab==="news"      && <NewsPage />}
+        {tab==="news"      && <NewsPage user={user} />}
       </div>
     </div>
   );
