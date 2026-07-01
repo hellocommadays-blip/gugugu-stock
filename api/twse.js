@@ -475,13 +475,21 @@ export default async function handler(req, res) {
         // 這個 eps endpoint 本身已經疊了好幾個外部 API 呼叫，不該再疊一次全市場掃描。
         // 這段獨立包一層 try/catch：就算產業中位數查詢失敗，也不能影響上面已經算好的 benchmark。
         try {
-          const base = process.env.VERCEL_URL
-            ? `https://${process.env.VERCEL_URL}`
-            : 'https://gugugu-stock.vercel.app';
-          const indUrl = `${base}/api/twse?type=industrype`;
+          // 不要用 process.env.VERCEL_URL——那指向的是「這次部署專屬網址」，
+          // Vercel 預設會擋一層 Deployment Protection 驗證頁，打過去只會拿到 HTML，不是 JSON。
+          // 固定打正式網域，這個網址沒有那層保護。
+          const indUrl  = 'https://gugugu-stock.vercel.app/api/twse?type=industrype';
           const indRes  = await fetch(indUrl);
           const indStatus = indRes.status;
-          const indData = await indRes.json();
+          const indText   = await indRes.text();
+
+          let indData;
+          try {
+            indData = JSON.parse(indText);
+          } catch (_) {
+            // 回應不是合法 JSON（例如又拿到 HTML），保留前 200 字方便排查，不讓它拋到外層 catch
+            throw new Error(`industrype 回應不是 JSON（status ${indStatus}）：${indText.slice(0, 200)}`);
+          }
 
           const industries   = indData?.industries || {};
           // industrype 不回傳 industryMap（避免回應太肥），這裡另外查這支股票自己的產業別
