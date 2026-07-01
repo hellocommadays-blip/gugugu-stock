@@ -200,7 +200,7 @@ export default async function handler(req, res) {
       msg += `發現 ${alerts.length} 檔需要注意：\n\n`;
 
       for (const a of alerts) {
-        msg += `${a.emoji} <b>${a.name}（${a.symbol}）</b>\n`;
+        msg += `${a.emoji} <b>${a.name}（${a.sym}）</b>\n`;
         msg += `　現價：${a.currency}${a.price.toLocaleString()}\n`;
         msg += `　基準值：${a.currency}${a.bm.toFixed(2)}\n`;
         msg += `　估值：<b>${a.zone}</b>（×${a.ratio.toFixed(2)}）\n\n`;
