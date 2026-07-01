@@ -478,7 +478,9 @@ export default async function handler(req, res) {
           const base = process.env.VERCEL_URL
             ? `https://${process.env.VERCEL_URL}`
             : 'https://gugugu-stock.vercel.app';
-          const indRes  = await fetch(`${base}/api/twse?type=industrype`);
+          const indUrl = `${base}/api/twse?type=industrype`;
+          const indRes  = await fetch(indUrl);
+          const indStatus = indRes.status;
           const indData = await indRes.json();
 
           const industries   = indData?.industries || {};
@@ -495,12 +497,23 @@ export default async function handler(req, res) {
           data.benchmarkByPE = (data.eps4sum > 0 && industryStat?.medianPE)
             ? Math.round(data.eps4sum * industryStat.medianPE * 100) / 100
             : null;
+
+          // debug 用：拿掉之前，先讓你看得到中間過程有沒有正確拿到資料
+          data._industryDebug = {
+            indUrl,
+            indStatus,
+            industrySuccess: indData?.success ?? null,
+            industriesKeyCount: Object.keys(industries).length,
+            foundCompItem: !!compItem,
+            stockIndustry,
+          };
         } catch (industryErr) {
           console.error('industry median PE lookup error:', industryErr.message);
           data.industryName       = null;
           data.industryMedianPE   = null;
           data.industrySampleSize = null;
           data.benchmarkByPE      = null;
+          data._industryDebug     = { error: industryErr.message };
         }
 
         break;
