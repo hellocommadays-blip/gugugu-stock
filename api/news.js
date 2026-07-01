@@ -186,10 +186,12 @@ export default async function handler(req, res) {
     }
 
     // 2. 抓所有用戶的自選股（去重），給 Claude 做關聯分析
-    const { data: watchlist } = await supabase
+    const { data: watchlist, error: wlError } = await supabase
       .from('watchlist')
       .select('symbol, name');
+    console.log('watchlist count:', watchlist?.length, 'error:', wlError?.message);
     const uniqueSymbols = [...new Set((watchlist || []).map(w => `${w.symbol}(${w.name || ''})`))].slice(0, 30);
+    console.log('uniqueSymbols:', uniqueSymbols);
 
     // 3. Claude 分析
     const analysis = await analyzeWithClaude(newsItems, uniqueSymbols);
