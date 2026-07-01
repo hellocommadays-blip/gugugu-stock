@@ -1990,7 +1990,36 @@ function NewsPage({ user }) {
           <div style={{ fontSize:12, color:C.faint, marginBottom:12 }}>
             更新時間：{new Date(data.created_at).toLocaleString('zh-TW', { timeZone:'Asia/Taipei' })}
           </div>
-          {renderAnalysis(data.analysis)}
+
+          {Array.isArray(data.top_news) ? (
+            <>
+              <div style={{ fontSize:19, fontWeight:800, color:C.navy, marginBottom:14 }}>
+                今日重點新聞
+              </div>
+              {data.top_news.map((n, i) => (
+                <div key={i} style={{ marginBottom: i === data.top_news.length - 1 ? 0 : 16 }}>
+                  <div style={{ fontSize:16, fontWeight:700, color:C.navy, lineHeight:1.7 }}>
+                    {i + 1}.{" "}
+                    {n.link ? (
+                      <a href={n.link} target="_blank" rel="noopener noreferrer"
+                        style={{ color:C.navy, textDecoration:"underline", textUnderlineOffset:2 }}>
+                        {n.title}
+                      </a>
+                    ) : n.title}
+                    {n.source && (
+                      <span style={{ fontSize:12, color:C.faint, fontWeight:400, marginLeft:8 }}>· {n.source}</span>
+                    )}
+                  </div>
+                  <div style={{ fontSize:15, color:C.muted, lineHeight:1.8, paddingLeft:4, marginTop:2 }}>
+                    影響：{n.impact}
+                  </div>
+                </div>
+              ))}
+            </>
+          ) : (
+            // 相容舊資料（尚未有 top_news 欄位的舊分析，沒有真實連結）
+            renderAnalysis(data.analysis)
+          )}
         </Card>
       )}
 
