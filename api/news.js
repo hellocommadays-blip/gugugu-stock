@@ -1,4 +1,3 @@
-
 // api/news.js — 產業新聞分析
 // 抓 Google News RSS → 篩選重點新聞 → Claude 分析影響鏈 + 對照自選股
 
@@ -252,12 +251,24 @@ export default async function handler(req, res) {
     // 3. Claude 分析（回傳「重點新聞 JSON（含真實連結）」+「自選股結構化 JSON」）
     const { topNews, stockImpacts } = await analyzeWithClaude(newsItems, uniqueWatchlist);
 
+    // 舊版 analysis 欄位可能是 NOT NULL（這張表最早就是用這個欄位存純文字），
+    // 為了不讓 insert 因為缺欄位而整筆失敗，這裡用 topNews 組一份純文字版本回填進去，
+    // 純粹是相容用途，前端顯示一律優先讀 top_news。
+    const legacyAnalysisText = topNews.length > 0
+      ? '今日重點新聞\n\n' + topNews.map((n, i) => `${i + 1}. ${n.title}\n影響：${n.impact}`).join('\n\n')
+      : '';
+
     // 4. 存進 Supabase
-    await supabase.from('news_analysis').insert({
+    const { error: insertError } = await supabase.from('news_analysis').insert({
+      analysis:      legacyAnalysisText,
       top_news:      topNews,
       stock_impacts: stockImpacts,
       news_items:    newsItems.slice(0, 30),
     });
+
+    if (insertError) {
+      console.error('news_analysis insert error:', insertError.message);
+    }
 
     res.status(200).json({
       success:      true,
@@ -265,6 +276,7 @@ export default async function handler(req, res) {
       stockImpacts,
       newsCount:    newsItems.length,
       updatedAt:    new Date().toISOString(),
+      dbSaveError:  insertError ? insertError.message : null,
     });
 
   } catch (err) {
