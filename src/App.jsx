@@ -15,24 +15,27 @@ const supabase = createClient(
 // 色票系統
 // ============================================================
 const C = {
-  bg:        "#FFF8F3",   // 奶油白
-  surface:   "#FFFFFF",   // 純白
-  surface2:  "#FFF3EE",   // 粉橘白
-  border:    "#F0DDD6",   // 淡粉
-  navy:      "#3D2B2B",   // 深咖啡
-  navyMid:   "#6B4444",   // 次標題
-  muted:     "#9B7B78",   // 玫瑰灰
-  faint:     "#C4A49F",   // 粉米
-  accent:    "#F4845F",   // 珊瑚橘
-  accentDark:"#D45F3C",   // 深珊瑚
-  up:        "#E85D5D",   // 上漲玫瑰紅
-  down:      "#5BAD8F",   // 下跌薄荷綠
-  z0: "#5BAD8F", // 極低估（薄荷綠）
-  z1: "#85C88A", // 低估（嫩綠）
-  z2: "#F4C06F", // 合理（奶黃）
-  z3: "#F4A460", // 偏高（杏橘）
-  z4: "#E85D5D", // 高估（玫瑰紅）
-  z5: "#C94040", // 泡沫（深玫瑰）
+  bg:         "#FAFAF8",   // 背景
+  surface:    "#FFFFFF",   // 純白卡片
+  surface2:   "#FFF7F2",   // 淺色卡片
+  border:     "#F5E4DC",   // 淡橘邊框
+  navy:       "#3D2B2B",   // 深咖啡（標題，維持不變）
+  navyMid:    "#6B4444",   // 次標題
+  muted:      "#9B7B78",   // 玫瑰灰
+  faint:      "#C4A49F",   // 粉米
+  accent:     "#F7A072",   // 馬卡龍品牌橘
+  accentDark: "#ED8752",   // 深橘 Hover
+  brandBlue:      "#3D5A80", // 品牌藍（互動色：按鈕/連結/圖表輔助）
+  brandBlueLight: "#6487B5", // 品牌藍漸層用（淺）
+  brandBlueDark:  "#293D57", // 品牌藍漸層用（深）
+  up:         "#E8655D",   // 上漲（魚骨珊瑚，加深可讀版）
+  down:       "#5BAD7C",   // 下跌（魚頭薄荷，加深可讀版）
+  z0: "#5BAD7C", // 極低估（魚頭綠）
+  z1: "#85C8A0", // 低估（魚頭淺綠）
+  z2: "#F4B76F", // 合理（魚尾暖黃）
+  z3: "#F4B160", // 偏高（魚尾橘）
+  z4: "#E8655D", // 高估（魚骨珊瑚）
+  z5: "#8340C9", // 泡沫（瘋狂紫）
 };
 
 // ============================================================
@@ -330,7 +333,7 @@ function AIAnalysis({ stock, bm, zone, user=null }) {
           ) : (
             <>
               <button onClick={runAnalysis}
-                style={{ width:"100%", padding:"12px", borderRadius:12, border:"none", background:`linear-gradient(135deg,#6D28D9,#4A9EFF)`, color:"#fff", fontWeight:700, fontSize:15, cursor:"pointer" }}>
+                style={{ width:"100%", padding:"12px", borderRadius:12, border:"none", background:`linear-gradient(135deg,${C.brandBlueDark},${C.brandBlueLight})`, color:"#fff", fontWeight:700, fontSize:15, cursor:"pointer" }}>
                 🤖 開始 AI 巡檢
               </button>
               {remaining !== null && (
@@ -385,7 +388,7 @@ function AIAnalysis({ stock, bm, zone, user=null }) {
       )}
 
       {error && (
-        <div style={{ color:C.down, fontSize:13, padding:"8px 0" }}>{error}</div>
+        <div style={{ color:C.up, fontSize:13, padding:"8px 0" }}>{error}</div>
       )}
 
       <div style={{ fontSize:11, color:C.faint, marginTop:8 }}>
@@ -482,7 +485,7 @@ function StockPage({ initialQuery='', initialMarket=null, rates={}, user=null, o
       </div>
 
       {loading && <div style={{ textAlign:"center", color:C.muted, padding:48 }}><div style={{ fontSize:40, marginBottom:10 }}>🕊️</div><div style={{ fontSize:15 }}>股咕股分析中⋯</div></div>}
-      {error && <div style={{ background:"#FEF2F2", border:`1px solid ${C.down}44`, borderRadius:12, padding:16, color:C.down, fontSize:14 }}>{error}</div>}
+      {error && <div style={{ background:"#FEF2F2", border:`1px solid ${C.up}44`, borderRadius:12, padding:16, color:C.up, fontSize:14 }}>{error}</div>}
 
       {stock && (
         <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
@@ -541,7 +544,7 @@ function StockPage({ initialQuery='', initialMarket=null, rates={}, user=null, o
             <Card>
               <SectionLabel>PRICE BANDS · 價格基準值</SectionLabel>
               {stock.isADR && (
-                <div style={{ background:"#F5F3FF", border:"1px solid #DDD6FE", borderRadius:10, padding:"8px 12px", marginBottom:12, fontSize:12, color:"#6D28D9" }}>
+                <div style={{ background:"#F1F4F8", border:"1px solid #CBD7E6", borderRadius:10, padding:"8px 12px", marginBottom:12, fontSize:12, color:C.brandBlue }}>
                   ⚠️ 日股ADR財務數據以美元計，基準值僅供參考，無法與日圓股價直接比較。
                 </div>
               )}
@@ -1602,7 +1605,7 @@ function PortfolioPage({ user, rates={} }) {
         </div>
       )}
 
-      <Card style={{ background:`linear-gradient(135deg,#EAF2FF,#F0F6FF)`, marginBottom:16 }}>
+      <Card style={{ background:`linear-gradient(135deg,#EEF2F6,#F5F7FA)`, marginBottom:16 }}>
         <SectionLabel>OVERVIEW · 總持倉概覽</SectionLabel>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:12 }}>
           {[
@@ -1978,7 +1981,7 @@ function NewsPage({ user }) {
       )}
 
       {error && (
-        <Card><div style={{ textAlign:"center", padding:32, color:C.down }}>{error}</div></Card>
+        <Card><div style={{ textAlign:"center", padding:32, color:C.up }}>{error}</div></Card>
       )}
 
       {!loading && !error && !data && (
@@ -2125,7 +2128,7 @@ function LoginModal({ onClose, onLogin }) {
             <input value={email} onChange={e=>setEmail(e.target.value)}
               onKeyDown={e=>e.key==="Enter"&&sendMagicLink()}
               placeholder="電子郵件" style={inputStyle} />
-            {error && <div style={{ fontSize:12, color:C.down }}>{error}</div>}
+            {error && <div style={{ fontSize:12, color:C.up }}>{error}</div>}
             <button onClick={sendMagicLink} disabled={loading}
               style={{ padding:"12px", borderRadius:12, border:"none", background:`linear-gradient(135deg,${C.accentDark},${C.accent})`, color:"#fff", fontWeight:700, fontSize:15, cursor:"pointer", opacity:loading?0.7:1 }}>
               {loading ? "傳送中⋯" : "發送登入連結"}
